@@ -1,0 +1,81 @@
+name: Add magnets to Real-Debrid
+
+# Bulk-add magnets to your Real-Debrid account.
+# 1. Add a repository secret RD_TOKEN — your private API token from
+#    https://real-debrid.com/apitoken
+# 2. Put one magnet link per line in magnets.txt (blank lines and lines
+#    starting with # are ignored), commit, and push — or run this workflow
+#    manually from the Actions tab.
+# Each magnet is added and its files selected for download. magnets.txt is
+# only read here; you can empty it again afterwards (Real-Debrid keeps the
+# torrents).
+on:
+  push:
+    branches: ['**']
+    paths: ['magnets.txt']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  add:
+    name: Add magnets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add each magnet to Real-Debrid
+        env:
+          RD_TOKEN: ${{ secrets.RD_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RD_TOKEN:-}" ]; then
+            echo "::error::RD_TOKEN secret is not set. Add it in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          if [ ! -f magnets.txt ]; then
+            echo "::error::magnets.txt not found."
+            exit 1
+          fi
+
+          api="https://api.real-debrid.com/rest/1.0"
+          auth="Authorization: Bearer ${RD_TOKEN}"
+          added=0; failed=0
+
+          # Read line-by-line; ignore blanks and comments.
+          while IFS= read -r line || [ -n "$line" ]; do
+            magnet="$(printf '%s' "$line" | sed 's/[[:space:]]*$//')"
+            case "$magnet" in
+              ''|\#*) continue ;;
+              magnet:*) ;;
+              *) echo "Skipping non-magnet line: ${magnet:0:40}…"; continue ;;
+            esac
+
+            name="$(printf '%s' "$magnet" | sed -n 's/.*[?&]dn=\([^&]*\).*/\1/p' | head -c 80)"
+            echo "----"
+            echo "Adding: ${name:-<unnamed>}"
+
+            resp="$(curl -sS -X POST "$api/torrents/addMagnet" \
+              -H "$auth" --data-urlencode "magnet=$magnet" || true)"
+            id="$(printf '%s' "$resp" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
+
+            if [ -z "$id" ]; then
+              echo "::warning::Failed to add (${name:-unnamed}): $resp"
+              failed=$((failed+1))
+              continue
+            fi
+
+            # Select all files so Real-Debrid starts caching them.
+            sel="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+              "$api/torrents/selectFiles/$id" -H "$auth" --data "files=all" || true)"
+            echo "Added id=$id (selectFiles HTTP $sel)"
+            added=$((added+1))
+
+            sleep 1  # be gentle with the API
+          done < magnets.txt
+
+          echo "===="
+          echo "Done: $added added, $failed failed."
+          if [ "$failed" -gt 0 ] && [ "$added" -eq 0 ]; then exit 1; fi

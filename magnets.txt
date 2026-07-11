@@ -1,0 +1,4 @@
+# Add one magnet link per line, then commit & push (or run the
+# "Add magnets to Real-Debrid" workflow manually from the Actions tab).
+# Blank lines and lines starting with # are ignored.
+# You can empty this file again after the run — Real-Debrid keeps the torrents.
