@@ -3,6 +3,11 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create (e.g. v1.0.0)'
+        required: true
 
 permissions:
   contents: write
@@ -11,6 +16,8 @@ jobs:
   release:
     name: Build signed APK and publish release
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,10 +43,11 @@ jobs:
         run: ./gradlew assembleRelease --stacktrace
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk arc-tv-${{ github.ref_name }}.apk
+        run: cp app/build/outputs/apk/release/app-release.apk "arc-tv-${RELEASE_TAG}.apk"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: arc-tv-${{ github.ref_name }}.apk
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: arc-tv-*.apk
           generate_release_notes: true
