@@ -12,7 +12,7 @@ name: Add magnets to Real-Debrid
 on:
   push:
     branches: ['**']
-    paths: ['magnets.txt']
+    paths: ['magnets.txt', '.github/workflows/add-magnets.yml']
   workflow_dispatch:
 
 permissions:
@@ -44,6 +44,27 @@ jobs:
           auth="Authorization: Bearer ${RD_TOKEN}"
           added=0; failed=0
 
+          # addMagnet with retry/backoff on rate limiting (error_code 34).
+          # Echoes the torrent id on success, nothing on failure.
+          add_magnet() {
+            local magnet="$1" attempt resp id
+            for attempt in 1 2 3 4 5; do
+              resp="$(curl -sS -X POST "$api/torrents/addMagnet" \
+                -H "$auth" --data-urlencode "magnet=$magnet" || true)"
+              # RD returns {"id": "...", "uri": "..."} on success (note the space).
+              id="$(printf '%s' "$resp" | grep -oE '"id"[[:space:]]*:[[:space:]]*"[^"]+"' \
+                | head -1 | sed -E 's/.*"([^"]+)"$/\1/')"
+              if [ -n "$id" ]; then printf '%s' "$id"; return 0; fi
+              case "$resp" in
+                *too_many_requests*|*error_code\":\ 34*)
+                  sleep $((attempt * 3)); continue ;;
+                *) echo "::warning::addMagnet failed: $resp" >&2; return 1 ;;
+              esac
+            done
+            echo "::warning::addMagnet gave up after retries" >&2
+            return 1
+          }
+
           # Read line-by-line; ignore blanks and comments.
           while IFS= read -r line || [ -n "$line" ]; do
             magnet="$(printf '%s' "$line" | sed 's/[[:space:]]*$//')"
@@ -57,15 +78,7 @@ jobs:
             echo "----"
             echo "Adding: ${name:-<unnamed>}"
 
-            resp="$(curl -sS -X POST "$api/torrents/addMagnet" \
-              -H "$auth" --data-urlencode "magnet=$magnet" || true)"
-            id="$(printf '%s' "$resp" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
-
-            if [ -z "$id" ]; then
-              echo "::warning::Failed to add (${name:-unnamed}): $resp"
-              failed=$((failed+1))
-              continue
-            fi
+            id="$(add_magnet "$magnet")" || { failed=$((failed+1)); continue; }
 
             # Select all files so Real-Debrid starts caching them.
             sel="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
@@ -73,9 +86,9 @@ jobs:
             echo "Added id=$id (selectFiles HTTP $sel)"
             added=$((added+1))
 
-            sleep 1  # be gentle with the API
+            sleep 3  # be gentle with the API
           done < magnets.txt
 
           echo "===="
           echo "Done: $added added, $failed failed."
-          if [ "$failed" -gt 0 ] && [ "$added" -eq 0 ]; then exit 1; fi
+          if [ "$added" -eq 0 ]; then exit 1; fi
