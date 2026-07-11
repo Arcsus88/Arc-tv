@@ -2,6 +2,8 @@ package com.arcsus.arctv.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.arcsus.arctv.data.FilenameParser
+import com.arcsus.arctv.data.ParsedMedia
 import com.arcsus.arctv.data.RdRepository
 import com.arcsus.arctv.data.TorrentItem
 import com.arcsus.arctv.data.UnrestrictedLink
@@ -10,8 +12,30 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 private const val PAGE_SIZE = 50
+
+enum class TorrentFilter(val label: String) { ALL("All"), MOVIES("Movies"), TV("TV") }
+
+/** A row in the torrents grid: either a single title or a grouped series. */
+sealed interface TorrentEntry {
+    val key: String
+    val displayTitle: String
+    val posterFilename: String
+
+    data class Single(val torrent: TorrentItem, val media: ParsedMedia?) : TorrentEntry {
+        override val key get() = "t:${torrent.id}"
+        override val displayTitle get() = media?.title ?: torrent.filename
+        override val posterFilename get() = torrent.filename
+    }
+
+    data class Series(val title: String, val episodes: List<TorrentItem>) : TorrentEntry {
+        override val key get() = "s:${title.lowercase(Locale.US)}"
+        override val displayTitle get() = title
+        override val posterFilename get() = episodes.first().filename
+    }
+}
 
 class TorrentsViewModel(private val repository: RdRepository) : ViewModel() {
 
@@ -20,6 +44,8 @@ class TorrentsViewModel(private val repository: RdRepository) : ViewModel() {
         val loading: Boolean = false,
         val error: String? = null,
         val endReached: Boolean = false,
+        val filter: TorrentFilter = TorrentFilter.ALL,
+        val query: String = "",
     )
 
     /** A file inside a finished torrent, paired with its restricted link. */
@@ -27,6 +53,7 @@ class TorrentsViewModel(private val repository: RdRepository) : ViewModel() {
 
     sealed interface Picker {
         data object Hidden : Picker
+        data class Episodes(val title: String, val episodes: List<TorrentItem>) : Picker
         data class LoadingInfo(val torrent: TorrentItem) : Picker
         data class Files(val torrent: TorrentItem, val files: List<PickableFile>) : Picker
         data class Unrestricting(val torrent: TorrentItem) : Picker
@@ -74,9 +101,13 @@ class TorrentsViewModel(private val repository: RdRepository) : ViewModel() {
 
     fun refresh() {
         page = 1
-        _state.update { UiState() }
+        _state.update { UiState(filter = it.filter, query = it.query) }
         loadMore()
     }
+
+    fun setFilter(filter: TorrentFilter) = _state.update { it.copy(filter = filter) }
+
+    fun setQuery(query: String) = _state.update { it.copy(query = query) }
 
     /**
      * The same torrent can be added to Real-Debrid more than once (same hash,
@@ -100,6 +131,16 @@ class TorrentsViewModel(private val repository: RdRepository) : ViewModel() {
         val theirs = if (other.status == "downloaded") 1 else 0
         if (mine != theirs) return mine > theirs
         return progress > other.progress
+    }
+
+    fun openSeries(series: TorrentEntry.Series) {
+        val sorted = series.episodes.sortedWith(
+            compareBy(
+                { FilenameParser.parse(it.filename)?.season ?: 0 },
+                { FilenameParser.parse(it.filename)?.episode ?: 0 },
+            ),
+        )
+        _picker.value = Picker.Episodes(series.title, sorted)
     }
 
     fun openTorrent(torrent: TorrentItem) {
@@ -152,5 +193,64 @@ class TorrentsViewModel(private val repository: RdRepository) : ViewModel() {
 
     fun dismissPicker() {
         _picker.value = Picker.Hidden
+    }
+}
+
+/**
+ * Turns the flat torrent list into display entries: TV episodes of the same show
+ * are grouped into one [TorrentEntry.Series]; everything else is a
+ * [TorrentEntry.Single]. Then applies the Movie/TV filter and the search query.
+ * First-appearance order is preserved.
+ */
+fun buildTorrentEntries(
+    items: List<TorrentItem>,
+    filter: TorrentFilter,
+    query: String,
+): List<TorrentEntry> {
+    val parsed = items.map { it to FilenameParser.parse(it.filename) }
+
+    // Collect TV episodes by normalised show title.
+    val tvGroups = LinkedHashMap<String, MutableList<TorrentItem>>()
+    val tvDisplay = HashMap<String, String>()
+    for ((item, media) in parsed) {
+        if (media != null && media.isTv) {
+            val key = media.title.lowercase(Locale.US).trim()
+            tvGroups.getOrPut(key) { mutableListOf() }.add(item)
+            tvDisplay.putIfAbsent(key, media.title)
+        }
+    }
+
+    val emittedSeries = HashSet<String>()
+    val entries = mutableListOf<TorrentEntry>()
+    for ((item, media) in parsed) {
+        if (media != null && media.isTv) {
+            val key = media.title.lowercase(Locale.US).trim()
+            val group = tvGroups[key].orEmpty()
+            if (group.size >= 2) {
+                if (emittedSeries.add(key)) {
+                    entries += TorrentEntry.Series(tvDisplay[key] ?: media.title, group)
+                }
+            } else {
+                entries += TorrentEntry.Single(item, media)
+            }
+        } else {
+            entries += TorrentEntry.Single(item, media)
+        }
+    }
+
+    val filtered = entries.filter { entry ->
+        when (filter) {
+            TorrentFilter.ALL -> true
+            TorrentFilter.TV -> entry is TorrentEntry.Series ||
+                (entry is TorrentEntry.Single && entry.media?.isTv == true)
+            TorrentFilter.MOVIES -> entry is TorrentEntry.Single && entry.media?.isTv != true
+        }
+    }
+
+    val q = query.trim()
+    if (q.isEmpty()) return filtered
+    return filtered.filter { entry ->
+        entry.displayTitle.contains(q, ignoreCase = true) ||
+            (entry is TorrentEntry.Single && entry.torrent.filename.contains(q, ignoreCase = true))
     }
 }
