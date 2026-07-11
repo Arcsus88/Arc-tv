@@ -59,7 +59,7 @@ class TorrentsViewModel(private val repository: RdRepository) : ViewModel() {
                 page++
                 _state.update {
                     it.copy(
-                        items = it.items + result.items,
+                        items = dedupeByHash(it.items + result.items),
                         loading = false,
                         endReached = result.items.size < PAGE_SIZE,
                     )
@@ -76,6 +76,30 @@ class TorrentsViewModel(private val repository: RdRepository) : ViewModel() {
         page = 1
         _state.update { UiState() }
         loadMore()
+    }
+
+    /**
+     * The same torrent can be added to Real-Debrid more than once (same hash,
+     * different id). Collapse those to one entry, preferring a finished copy and
+     * otherwise the furthest-along one.
+     */
+    private fun dedupeByHash(items: List<TorrentItem>): List<TorrentItem> {
+        val best = LinkedHashMap<String, TorrentItem>()
+        for (item in items) {
+            val key = item.hash.ifBlank { item.id }
+            val existing = best[key]
+            if (existing == null || item.isBetterThan(existing)) {
+                best[key] = item
+            }
+        }
+        return best.values.toList()
+    }
+
+    private fun TorrentItem.isBetterThan(other: TorrentItem): Boolean {
+        val mine = if (status == "downloaded") 1 else 0
+        val theirs = if (other.status == "downloaded") 1 else 0
+        if (mine != theirs) return mine > theirs
+        return progress > other.progress
     }
 
     fun openTorrent(torrent: TorrentItem) {

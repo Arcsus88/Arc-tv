@@ -1,10 +1,13 @@
 package com.arcsus.arctv.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -13,8 +16,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -28,7 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,23 +91,25 @@ fun TorrentsScreen(viewModel: TorrentsViewModel) {
             }
             state.items.isEmpty() -> CenteredMessage("No torrents yet.")
             else -> {
-                val listState = rememberLazyListState()
+                val gridState = rememberLazyGridState()
                 val itemCount = state.items.size
-                LaunchedEffect(listState, itemCount) {
+                LaunchedEffect(gridState, itemCount) {
                     snapshotFlow {
-                        listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                        gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
                     }.collect { lastVisible ->
-                        if (lastVisible >= itemCount - 6) viewModel.loadMore()
+                        if (lastVisible >= itemCount - 8) viewModel.loadMore()
                     }
                 }
-                LazyColumn(
-                    state = listState,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(6),
+                    state = gridState,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                     contentPadding = PaddingValues(bottom = 32.dp, top = 4.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(state.items, key = { it.id }) { torrent ->
-                        TorrentRow(torrent, onClick = { viewModel.openTorrent(torrent) })
+                    gridItems(state.items, key = { it.id }) { torrent ->
+                        TorrentCard(torrent, onClick = { viewModel.openTorrent(torrent) })
                     }
                 }
             }
@@ -169,7 +176,7 @@ fun TorrentsScreen(viewModel: TorrentsViewModel) {
 }
 
 @Composable
-private fun TorrentRow(torrent: TorrentItem, onClick: () -> Unit) {
+private fun TorrentCard(torrent: TorrentItem, onClick: () -> Unit) {
     val context = LocalContext.current
     val finished = torrent.status == "downloaded"
     val parsed = remember(torrent.filename) { FilenameParser.parse(torrent.filename) }
@@ -185,56 +192,45 @@ private fun TorrentRow(torrent: TorrentItem, onClick: () -> Unit) {
                 ).show()
             }
         },
-        modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        ) {
-            PosterImage(
-                posterUrl = rememberPosterUrl(torrent.filename),
-                modifier = Modifier
-                    .width(44.dp)
-                    .height(66.dp)
-                    .clip(RoundedCornerShape(6.dp)),
-            )
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
+        Column {
+            Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
+                PosterImage(rememberPosterUrl(torrent.filename), Modifier.fillMaxSize())
+                // Status pill over the poster corner.
+                Text(
+                    statusLabel(torrent),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusColor(torrent),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                            RoundedCornerShape(6.dp),
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+            Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                 Text(
                     parsed?.title ?: torrent.filename,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        statusLabel(torrent),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = statusColor(torrent),
-                        fontWeight = FontWeight.Bold,
-                    )
-                    parsed?.episodeLabel?.let { label ->
-                        Spacer(Modifier.width(16.dp))
-                        Text(
-                            label,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    Text(
-                        formatBytes(torrent.bytes),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        formatDate(torrent.added),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Spacer(Modifier.height(2.dp))
+                val meta = listOfNotNull(
+                    parsed?.episodeLabel ?: parsed?.year?.toString(),
+                    formatBytes(torrent.bytes),
+                ).joinToString(" • ")
+                Text(
+                    meta,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
