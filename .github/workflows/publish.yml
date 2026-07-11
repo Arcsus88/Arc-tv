@@ -1,0 +1,53 @@
+name: Publish release
+
+# Branch-push driven release path for environments that cannot push tags or
+# dispatch workflows: bump .release-version and push. Builds the signed APK
+# and creates/updates the GitHub Release for that version's tag.
+on:
+  push:
+    branches: ['**']
+    paths: ['.release-version']
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Build signed APK and publish release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read release version
+        run: echo "RELEASE_TAG=$(cat .release-version)" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode release keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
+
+      - name: Build signed release APK
+        env:
+          KEYSTORE_FILE: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Rename APK
+        run: cp app/build/outputs/apk/release/app-release.apk "arc-tv-${RELEASE_TAG}.apk"
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: arc-tv-*.apk
+          generate_release_notes: true
