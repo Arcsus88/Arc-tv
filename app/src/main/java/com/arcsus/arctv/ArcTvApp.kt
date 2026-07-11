@@ -1,6 +1,7 @@
 package com.arcsus.arctv
 
 import android.app.Application
+import com.arcsus.arctv.data.ArtworkRepository
 import com.arcsus.arctv.data.RdClient
 import com.arcsus.arctv.data.RdRepository
 import com.arcsus.arctv.data.TokenStore
@@ -13,11 +14,14 @@ class ArcTvApp : Application() {
         private set
     lateinit var repository: RdRepository
         private set
+    lateinit var artworkRepository: ArtworkRepository
+        private set
 
     override fun onCreate() {
         super.onCreate()
         tokenStore = TokenStore(this)
         rdClient = RdClient(tokenStore)
         repository = RdRepository(rdClient, tokenStore)
+        artworkRepository = ArtworkRepository(this)
     }
 }

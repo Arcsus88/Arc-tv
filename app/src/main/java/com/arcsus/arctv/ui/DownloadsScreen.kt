@@ -3,6 +3,7 @@ package com.arcsus.arctv.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,6 +39,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.arcsus.arctv.data.DownloadItem
+import com.arcsus.arctv.data.FilenameParser
 
 @Composable
 fun DownloadsScreen(viewModel: DownloadsViewModel) {
@@ -98,7 +100,7 @@ fun DownloadsScreen(viewModel: DownloadsViewModel) {
                     }
                 }
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
+                    columns = GridCells.Fixed(6),
                     state = gridState,
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -132,43 +134,40 @@ private fun DownloadCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
+    val parsed = remember(item.filename) { FilenameParser.parse(item.filename) }
+    val streamable = isStreamableFilename(item.filename) ||
+        item.mimeType?.startsWith("video/") == true
+
     androidx.tv.material3.Card(
         onClick = onClick,
         onLongClick = onLongClick,
     ) {
-        Column(Modifier.padding(14.dp).height(112.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                HostIcon(host = item.host, iconUrl = item.hostIcon)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    item.host,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+        Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
+            val posterUrl = if (streamable) rememberPosterUrl(item.filename) else null
+            PosterImage(posterUrl, Modifier.fillMaxSize())
+            Box(Modifier.align(Alignment.TopStart).padding(6.dp)) {
+                HostIcon(host = item.host, iconUrl = item.hostIcon, modifier = Modifier)
             }
-            Spacer(Modifier.height(10.dp))
+        }
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
             Text(
-                item.filename,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
+                parsed?.title ?: item.filename,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.weight(1f))
-            Row(Modifier.fillMaxWidth()) {
-                Text(
-                    formatBytes(item.filesize),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    formatDate(item.generated),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Spacer(Modifier.height(2.dp))
+            val meta = listOfNotNull(
+                parsed?.episodeLabel ?: parsed?.year?.toString(),
+                formatBytes(item.filesize),
+            ).joinToString(" • ")
+            Text(
+                meta,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

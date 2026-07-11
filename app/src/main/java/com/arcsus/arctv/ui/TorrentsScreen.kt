@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -39,6 +40,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.arcsus.arctv.data.FilenameParser
 import com.arcsus.arctv.data.TorrentItem
 import com.arcsus.arctv.ui.theme.ArcBlue
 
@@ -170,6 +172,7 @@ fun TorrentsScreen(viewModel: TorrentsViewModel) {
 private fun TorrentRow(torrent: TorrentItem, onClick: () -> Unit) {
     val context = LocalContext.current
     val finished = torrent.status == "downloaded"
+    val parsed = remember(torrent.filename) { FilenameParser.parse(torrent.filename) }
     Card(
         onClick = {
             if (finished) {
@@ -184,33 +187,54 @@ private fun TorrentRow(torrent: TorrentItem, onClick: () -> Unit) {
         },
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
-            Text(
-                torrent.filename,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            PosterImage(
+                posterUrl = rememberPosterUrl(torrent.filename),
+                modifier = Modifier
+                    .width(44.dp)
+                    .height(66.dp)
+                    .clip(RoundedCornerShape(6.dp)),
             )
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
                 Text(
-                    statusLabel(torrent),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = statusColor(torrent),
-                    fontWeight = FontWeight.Bold,
+                    parsed?.title ?: torrent.filename,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.width(16.dp))
-                Text(
-                    formatBytes(torrent.bytes),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    formatDate(torrent.added),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        statusLabel(torrent),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = statusColor(torrent),
+                        fontWeight = FontWeight.Bold,
+                    )
+                    parsed?.episodeLabel?.let { label ->
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Text(
+                        formatBytes(torrent.bytes),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        formatDate(torrent.added),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
