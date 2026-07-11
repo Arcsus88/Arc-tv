@@ -91,4 +91,11 @@ jobs:
 
           echo "===="
           echo "Done: $added added, $failed failed."
+
+          echo ""
+          echo "Current torrents in your Real-Debrid account:"
+          curl -sS "$api/torrents?limit=25" -H "$auth" \
+            | grep -oE '"filename":"[^"]*"|"status":"[^"]*"' \
+            | sed 'N;s/\n/  /' || true
+
           if [ "$added" -eq 0 ]; then exit 1; fi
