@@ -2,10 +2,17 @@ package com.arcsus.arctv.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -15,10 +22,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.tv.material3.Button
+import androidx.tv.material3.Icon
+import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Tab
 import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
-import com.arcsus.arctv.ui.ArcTvViewModelFactory
 
 private val TABS = listOf("Downloads", "Torrents")
 
@@ -28,13 +37,17 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
     val downloadsViewModel: DownloadsViewModel = viewModel(factory = factory)
     val torrentsViewModel: TorrentsViewModel = viewModel(factory = factory)
 
+    val updateState by updateViewModel.state.collectAsState()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
     Column(Modifier.fillMaxSize()) {
         UpdateBanner(updateViewModel)
 
-        Box(Modifier.fillMaxWidth().padding(top = 12.dp), contentAlignment = Alignment.Center) {
-            TabRow(selectedTabIndex = selectedTab) {
+        Box(
+            Modifier.fillMaxWidth().padding(top = 12.dp, start = 40.dp, end = 40.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            TabRow(selectedTabIndex = selectedTab, modifier = Modifier.align(Alignment.Center)) {
                 TABS.forEachIndexed { index, title ->
                     key(index) {
                         Tab(
@@ -47,6 +60,34 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
                             )
                         }
                     }
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            ) {
+                val feedback = when {
+                    updateState.checking -> "Checking…"
+                    updateState.upToDate -> "You're on the latest version"
+                    updateState.error != null -> updateState.error
+                    else -> null
+                }
+                feedback?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                }
+                Button(
+                    onClick = { updateViewModel.checkForUpdate() },
+                    enabled = !updateState.checking,
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Check for updates")
                 }
             }
         }

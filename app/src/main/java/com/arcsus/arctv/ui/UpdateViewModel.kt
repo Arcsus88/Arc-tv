@@ -17,20 +17,44 @@ class UpdateViewModel(private val checker: UpdateChecker) : ViewModel() {
         val downloading: Boolean = false,
         val error: String? = null,
         val dismissed: Boolean = false,
+        val checking: Boolean = false,
+        /** True after a manual check that found no newer version. */
+        val upToDate: Boolean = false,
     )
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state
 
     init {
+        // Silent check on launch; the banner appears only if something is found.
+        checkForUpdate(manual = false)
+    }
+
+    /** Re-check GitHub for a newer release. [manual] surfaces progress/"up to date" feedback. */
+    fun checkForUpdate(manual: Boolean = true) {
+        if (_state.value.checking) return
+        _state.update {
+            it.copy(checking = true, upToDate = false, dismissed = false, error = null)
+        }
         viewModelScope.launch {
             try {
                 val info = checker.check()
-                _state.update { it.copy(available = info) }
+                _state.update {
+                    it.copy(
+                        checking = false,
+                        available = info,
+                        upToDate = manual && info == null,
+                    )
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Update check is best-effort; stay quiet on failure.
+                _state.update {
+                    it.copy(
+                        checking = false,
+                        error = if (manual) "Couldn't check for updates. Try again." else null,
+                    )
+                }
             }
         }
     }
