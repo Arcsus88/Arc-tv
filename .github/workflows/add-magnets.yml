@@ -93,9 +93,13 @@ jobs:
           echo "Done: $added added, $failed failed."
 
           echo ""
-          echo "Current torrents in your Real-Debrid account:"
-          curl -sS "$api/torrents?limit=25" -H "$auth" \
-            | grep -oE '"filename":"[^"]*"|"status":"[^"]*"' \
-            | sed 'N;s/\n/  /' || true
+          echo "Whose account is this token? (GET /user):"
+          curl -sS "$api/user" -H "$auth" \
+            | grep -oE '"(username|email|type|premium)":[^,}]*' || true
+
+          echo ""
+          echo "Torrent count (GET /torrents):"
+          tcount="$(curl -sS "$api/torrents?limit=100" -H "$auth")"
+          echo "raw (first 1500 chars): ${tcount:0:1500}"
 
           if [ "$added" -eq 0 ]; then exit 1; fi
