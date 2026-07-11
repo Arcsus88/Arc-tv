@@ -1,5 +1,12 @@
 package com.arcsus.arctv.ui
 
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -30,4 +37,28 @@ fun formatDate(iso: String): String {
     } catch (e: Exception) {
         iso.take(10)
     }
+}
+
+/**
+ * Hands the URL to an external video player (VLC, Just Player, …).
+ * Returns false when no player is installed.
+ */
+fun playVideo(context: Context, url: String, title: String? = null): Boolean {
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(Uri.parse(url), "video/*")
+        if (!title.isNullOrBlank()) putExtra("title", title)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    return try {
+        context.startActivity(intent)
+        true
+    } catch (e: ActivityNotFoundException) {
+        false
+    }
+}
+
+fun copyToClipboard(context: Context, text: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText("Arc TV link", text))
+    Toast.makeText(context, "Link copied to clipboard", Toast.LENGTH_SHORT).show()
 }
