@@ -15,15 +15,33 @@ import java.util.concurrent.TimeUnit
 
 @Serializable
 data class CatalogItem(
+    val id: Int = 0,
     val type: String = "movie",
     val title: String = "",
     val year: String = "",
     val poster: String = "",
     val overview: String = "",
-)
+) {
+    val isTv: Boolean get() = type == "tv"
+}
 
 @Serializable
 data class CatalogRow(val title: String = "", val items: List<CatalogItem> = emptyList())
+
+@Serializable
+data class Season(val number: Int = 0, val name: String = "", val episodeCount: Int = 0)
+
+@Serializable
+data class Episode(val episode: Int = 0, val name: String = "")
+
+@Serializable
+data class Source(
+    val title: String = "",
+    val size: String = "",
+    val seeds: Int = 0,
+    val quality: Int = 0,
+    val magnet: String = "",
+)
 
 @Serializable
 private data class HomeResponse(val rows: List<CatalogRow> = emptyList(), val error: String? = null)
@@ -32,23 +50,32 @@ private data class HomeResponse(val rows: List<CatalogRow> = emptyList(), val er
 private data class SearchResponse(val items: List<CatalogItem> = emptyList(), val error: String? = null)
 
 @Serializable
-private data class ResolveResponse(
+private data class SeasonsResponse(val seasons: List<Season> = emptyList(), val error: String? = null)
+
+@Serializable
+private data class EpisodesResponse(val episodes: List<Episode> = emptyList(), val error: String? = null)
+
+@Serializable
+private data class SourcesResponse(val sources: List<Source> = emptyList(), val error: String? = null)
+
+@Serializable
+private data class PlayResponse(
     val ok: Boolean = false,
     val streamUrl: String? = null,
     val filename: String? = null,
-    val quality: String? = null,
+    val status: String? = null,
     val error: String? = null,
 )
 
 class BrowseException(message: String) : Exception(message)
 
-/** Playable result of resolving a catalog title through the backend. */
+/** Playable result of resolving a source through the backend. */
 data class ResolvedStream(val streamUrl: String, val filename: String)
 
 /**
- * Talks to the Arc TV Edge Function: TMDB catalog (home/search) plus resolve,
- * which finds a working, cached torrent for a title and returns a playable link.
- * The caller's RD token is sent so the backend adds to the signed-in account.
+ * Talks to the Arc TV Edge Function: TMDB catalogue, TV seasons/episodes, torrent
+ * source listing, and playing a chosen source through Real-Debrid. The caller's RD
+ * token is sent so the backend adds to the signed-in account.
  */
 class BrowseRepository(private val tokenStore: TokenStore) {
 
@@ -60,54 +87,67 @@ class BrowseRepository(private val tokenStore: TokenStore) {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS) // resolve can try several sources
+        .readTimeout(120, TimeUnit.SECONDS)
         .build()
     private val json = Json { ignoreUnknownKeys = true }
     private val jsonMedia = "application/json".toMediaType()
 
-    suspend fun home(): List<CatalogRow> {
-        val rdToken = requireToken()
-        return withContext(Dispatchers.IO) {
-            val text = post(buildJsonObject { put("action", "home") }, rdToken)
-            val parsed = json.decodeFromString<HomeResponse>(text)
-            if (parsed.error != null) throw BrowseException(parsed.error)
-            parsed.rows
-        }
+    suspend fun home(): List<CatalogRow> = call { rd ->
+        val p = json.decodeFromString<HomeResponse>(post(buildJsonObject { put("action", "home") }, rd))
+        p.error?.let { throw BrowseException(it) }
+        p.rows
     }
 
-    suspend fun search(query: String): List<CatalogItem> {
-        val rdToken = requireToken()
-        return withContext(Dispatchers.IO) {
-            val body = buildJsonObject {
-                put("action", "search")
-                put("query", query)
-            }
-            val parsed = json.decodeFromString<SearchResponse>(post(body, rdToken))
-            if (parsed.error != null) throw BrowseException(parsed.error)
-            parsed.items
-        }
+    suspend fun search(query: String): List<CatalogItem> = call { rd ->
+        val body = buildJsonObject { put("action", "search"); put("query", query) }
+        val p = json.decodeFromString<SearchResponse>(post(body, rd))
+        p.error?.let { throw BrowseException(it) }
+        p.items
     }
 
-    suspend fun resolve(item: CatalogItem): ResolvedStream {
-        val rdToken = requireToken()
-        return withContext(Dispatchers.IO) {
-            val body = buildJsonObject {
-                put("action", "resolve")
-                put("title", item.title)
-                put("year", item.year)
-                put("type", item.type)
-            }
-            val parsed = json.decodeFromString<ResolveResponse>(post(body, rdToken))
-            if (!parsed.ok || parsed.streamUrl == null) {
-                throw BrowseException(parsed.error ?: "No playable source found.")
-            }
-            ResolvedStream(parsed.streamUrl, parsed.filename ?: item.title)
-        }
+    suspend fun seasons(item: CatalogItem): List<Season> = call { rd ->
+        val body = buildJsonObject { put("action", "seasons"); put("id", item.id) }
+        val p = json.decodeFromString<SeasonsResponse>(post(body, rd))
+        p.error?.let { throw BrowseException(it) }
+        p.seasons
     }
 
-    private suspend fun requireToken(): String =
-        tokenStore.currentTokens()?.accessToken
+    suspend fun episodes(item: CatalogItem, season: Int): List<Episode> = call { rd ->
+        val body = buildJsonObject {
+            put("action", "episodes"); put("id", item.id); put("season", season)
+        }
+        val p = json.decodeFromString<EpisodesResponse>(post(body, rd))
+        p.error?.let { throw BrowseException(it) }
+        p.episodes
+    }
+
+    suspend fun sources(item: CatalogItem, season: Int?, episode: Int?): List<Source> = call { rd ->
+        val body = buildJsonObject {
+            put("action", "sources")
+            put("title", item.title)
+            put("year", item.year)
+            put("type", item.type)
+            if (season != null) put("season", season)
+            if (episode != null) put("episode", episode)
+        }
+        val p = json.decodeFromString<SourcesResponse>(post(body, rd))
+        p.error?.let { throw BrowseException(it) }
+        p.sources
+    }
+
+    /** Add one chosen magnet to RD and return a playable link (throws if not cached). */
+    suspend fun play(source: Source): ResolvedStream = call { rd ->
+        val body = buildJsonObject { put("action", "play"); put("magnet", source.magnet) }
+        val p = json.decodeFromString<PlayResponse>(post(body, rd))
+        if (!p.ok || p.streamUrl == null) throw BrowseException(p.error ?: "Not playable.")
+        ResolvedStream(p.streamUrl, p.filename ?: source.title)
+    }
+
+    private suspend fun <T> call(block: (String) -> T): T {
+        val rd = tokenStore.currentTokens()?.accessToken
             ?: throw BrowseException("Not signed in to Real-Debrid.")
+        return withContext(Dispatchers.IO) { block(rd) }
+    }
 
     private fun post(body: JsonObject, rdToken: String): String {
         val request = Request.Builder()
