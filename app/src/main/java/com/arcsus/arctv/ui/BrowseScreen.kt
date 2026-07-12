@@ -1,5 +1,7 @@
 package com.arcsus.arctv.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,9 +64,23 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
     val playRequest by viewModel.playRequest.collectAsState()
     val context = LocalContext.current
 
+    // Launch the external player *for result*; when the player reports that the
+    // episode played to the end, auto-advance to the next one.
+    val playLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (playbackCompleted(result.data)) viewModel.playNextEpisode()
+    }
+
     LaunchedEffect(playRequest) {
         playRequest?.let { stream ->
-            if (!playVideo(context, stream.streamUrl, stream.filename)) {
+            val launched = try {
+                playLauncher.launch(buildPlayIntentForResult(stream.streamUrl, stream.filename))
+                true
+            } catch (e: android.content.ActivityNotFoundException) {
+                false
+            }
+            if (!launched) {
                 android.widget.Toast.makeText(
                     context, "No video player installed.", android.widget.Toast.LENGTH_LONG,
                 ).show()
@@ -310,10 +326,21 @@ private fun SheetHost(sheet: BrowseViewModel.Sheet, viewModel: BrowseViewModel) 
                 Text("Starting playback…", color = ArcBlue, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(12.dp))
             }
-            Button(onClick = { viewModel.autoPlay() }, enabled = s.playing == null) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null, Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Auto-play best")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = { viewModel.autoPlay() }, enabled = s.playing == null) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Auto-play best")
+                }
+                if (s.nextEpisode != null) {
+                    Spacer(Modifier.width(12.dp))
+                    OutlinedButton(
+                        onClick = { viewModel.playNextEpisode() },
+                        enabled = s.playing == null,
+                    ) {
+                        Text("Next: E%02d".format(s.nextEpisode))
+                    }
+                }
             }
             s.note?.let {
                 Spacer(Modifier.height(8.dp))

@@ -57,6 +57,41 @@ fun playVideo(context: Context, url: String, title: String? = null): Boolean {
     }
 }
 
+/**
+ * Builds a play intent suitable for launching *for result*, so players that
+ * report back (MX Player, VLC, Just Player) let us auto-advance to the next
+ * episode. No NEW_TASK flag — result delivery requires the same task.
+ */
+fun buildPlayIntentForResult(url: String, title: String? = null): Intent =
+    Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(Uri.parse(url), "video/*")
+        if (!title.isNullOrBlank()) putExtra("title", title)
+        // Ask MX Player to return a result describing how playback ended.
+        putExtra("return_result", true)
+    }
+
+private fun longExtra(data: Intent, key: String): Long? {
+    if (!data.hasExtra(key)) return null
+    val asLong = data.getLongExtra(key, Long.MIN_VALUE)
+    if (asLong != Long.MIN_VALUE) return asLong
+    val asInt = data.getIntExtra(key, Int.MIN_VALUE)
+    return if (asInt != Int.MIN_VALUE) asInt.toLong() else null
+}
+
+/**
+ * True when the returned player result indicates the video played to the end
+ * (so we should auto-advance). Handles MX Player's `end_by`/position+duration
+ * and VLC/Just Player's `extra_position`/`extra_duration`. Unknown players
+ * simply return false (no auto-advance).
+ */
+fun playbackCompleted(data: Intent?): Boolean {
+    if (data == null) return false
+    if (data.getStringExtra("end_by") == "playback_completion") return true
+    val position = longExtra(data, "position") ?: longExtra(data, "extra_position")
+    val duration = longExtra(data, "duration") ?: longExtra(data, "extra_duration")
+    return position != null && duration != null && duration > 0 && position >= duration - 5_000
+}
+
 fun copyToClipboard(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText("Arc TV link", text))
