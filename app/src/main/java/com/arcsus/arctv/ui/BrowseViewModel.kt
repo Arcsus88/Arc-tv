@@ -74,6 +74,12 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
     private val _playRequest = MutableStateFlow<ResolvedStream?>(null)
     val playRequest: StateFlow<ResolvedStream?> = _playRequest
 
+    // Session caches so reopening a title (or returning from a bad link) never
+    // re-runs the slow torrent search. Cleared when the ViewModel is recreated.
+    private val seasonsCache = mutableMapOf<Int, List<Season>>()
+    private val episodesCache = mutableMapOf<String, List<Episode>>()
+    private val sourcesCache = mutableMapOf<String, List<Source>>()
+
     init {
         loadHome()
         loadGenres()
@@ -181,24 +187,34 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
     }
 
     private fun loadSeasons(item: CatalogItem) {
+        seasonsCache[item.id]?.let {
+            _sheet.value = Sheet.Seasons(item, it)
+            return
+        }
         _sheet.value = Sheet.Loading("Loading seasons…")
         launchSheet {
             val seasons = repository.seasons(item)
             _sheet.value = if (seasons.isEmpty()) {
                 Sheet.Error("No season information for this show.")
             } else {
+                seasonsCache[item.id] = seasons
                 Sheet.Seasons(item, seasons)
             }
         }
     }
 
     fun selectSeason(item: CatalogItem, season: Int) {
+        episodesCache["${item.id}:$season"]?.let {
+            _sheet.value = Sheet.Episodes(item, season, it)
+            return
+        }
         _sheet.value = Sheet.Loading("Loading episodes…")
         launchSheet {
             val episodes = repository.episodes(item, season)
             _sheet.value = if (episodes.isEmpty()) {
                 Sheet.Error("No episodes found for that season.")
             } else {
+                episodesCache["${item.id}:$season"] = episodes
                 Sheet.Episodes(item, season, episodes)
             }
         }
@@ -207,12 +223,18 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
     fun selectEpisode(item: CatalogItem, season: Int, episode: Int) = loadSources(item, season, episode)
 
     private fun loadSources(item: CatalogItem, season: Int?, episode: Int?) {
+        val key = "${item.id}:${season ?: ""}:${episode ?: ""}"
+        sourcesCache[key]?.let {
+            _sheet.value = Sheet.Sources(item, season, episode, it)
+            return
+        }
         _sheet.value = Sheet.Loading("Finding sources…")
         launchSheet {
             val sources = repository.sources(item, season, episode)
             _sheet.value = if (sources.isEmpty()) {
                 Sheet.Error("No sources found for this title.")
             } else {
+                sourcesCache[key] = sources
                 Sheet.Sources(item, season, episode, sources)
             }
         }
@@ -231,7 +253,11 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
         viewModelScope.launch {
             try {
                 val stream = repository.play(source)
-                _sheet.value = Sheet.Hidden
+                // Keep the sources sheet up (just clear the spinner) so returning
+                // from the external player lands back on the list to try another.
+                (_sheet.value as? Sheet.Sources)?.let {
+                    _sheet.value = it.copy(playing = null, note = null)
+                }
                 _playRequest.value = stream
             } catch (e: CancellationException) {
                 throw e
