@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -89,7 +90,7 @@ fun TvSearchField(
         // Inactive: a focusable button. Focus lands here without opening the keyboard.
         Surface(
             onClick = { active = true },
-            shape = RoundedCornerShape(24.dp),
+            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(24.dp)),
             modifier = modifier,
         ) {
             Row(
