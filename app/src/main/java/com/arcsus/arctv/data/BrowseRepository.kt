@@ -41,6 +41,7 @@ data class Source(
     val seeds: Int = 0,
     val quality: Int = 0,
     val magnet: String = "",
+    val cached: Boolean = false,
 )
 
 @Serializable

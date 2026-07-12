@@ -291,6 +291,15 @@ private fun SourceRow(source: Source, playing: Boolean, onClick: () -> Unit) {
                     Spacer(Modifier.width(12.dp))
                 }
                 Text("▲ ${source.seeds}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (source.cached) {
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        "✓ Cached",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = androidx.compose.ui.graphics.Color(0xFF4CD964),
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
                 Spacer(Modifier.weight(1f))
                 if (playing) Text("Playing…", style = MaterialTheme.typography.labelSmall, color = ArcBlue)
             }
