@@ -92,6 +92,18 @@ fun playbackCompleted(data: Intent?): Boolean {
     return position != null && duration != null && duration > 0 && position >= duration - 5_000
 }
 
+/**
+ * True when the player reported *any* playback info on exit — meaning we can
+ * trust [playbackCompleted]'s answer and shouldn't fall back to the countdown
+ * prompt. Players that report nothing (e.g. VLC in many configs) return false.
+ */
+fun hasPlaybackInfo(data: Intent?): Boolean {
+    if (data == null) return false
+    return data.hasExtra("end_by") ||
+        data.hasExtra("position") || data.hasExtra("extra_position") ||
+        data.hasExtra("duration") || data.hasExtra("extra_duration")
+}
+
 fun copyToClipboard(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText("Arc TV link", text))

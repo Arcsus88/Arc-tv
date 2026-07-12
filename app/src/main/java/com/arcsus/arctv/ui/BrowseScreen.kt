@@ -34,7 +34,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -64,12 +68,37 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
     val playRequest by viewModel.playRequest.collectAsState()
     val context = LocalContext.current
 
-    // Launch the external player *for result*; when the player reports that the
-    // episode played to the end, auto-advance to the next one.
+    // The next episode we're offering to auto-advance to, and the countdown.
+    var autoNext by remember { mutableStateOf<NextEp?>(null) }
+    var secondsLeft by remember { mutableStateOf(0) }
+
+    // Launch the external player *for result*. Players that report completion
+    // (MX Player) auto-advance instantly. Players that report nothing (VLC) fall
+    // back to an "Up next" countdown shown when you return.
     val playLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
-        if (playbackCompleted(result.data)) viewModel.playNextEpisode()
+        val data = result.data
+        when {
+            playbackCompleted(data) -> viewModel.playNextEpisode()
+            hasPlaybackInfo(data) -> Unit // player says stopped early — don't advance
+            else -> (viewModel.sheet.value as? BrowseViewModel.Sheet.Sources)?.next?.let {
+                autoNext = it
+            }
+        }
+    }
+
+    // Count down, then auto-play the next episode unless cancelled.
+    LaunchedEffect(autoNext) {
+        if (autoNext == null) return@LaunchedEffect
+        secondsLeft = 10
+        while (secondsLeft > 0) {
+            delay(1000)
+            if (autoNext == null) return@LaunchedEffect
+            secondsLeft -= 1
+        }
+        autoNext = null
+        viewModel.playNextEpisode()
     }
 
     LaunchedEffect(playRequest) {
@@ -121,6 +150,32 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
     }
 
     SheetHost(sheet, viewModel)
+
+    autoNext?.let { n ->
+        SheetDialog("Up next", onDismiss = { autoNext = null }) {
+            Text(
+                "S%02dE%02d".format(n.season, n.episode),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Playing in ${secondsLeft}s…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(18.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = { autoNext = null; viewModel.playNextEpisode() }) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Play now")
+                }
+                Spacer(Modifier.width(12.dp))
+                OutlinedButton(onClick = { autoNext = null }) { Text("Cancel") }
+            }
+        }
+    }
 }
 
 @Composable
