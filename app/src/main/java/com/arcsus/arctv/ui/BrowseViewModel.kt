@@ -11,6 +11,7 @@ import com.arcsus.arctv.data.Genres
 import com.arcsus.arctv.data.ResolvedStream
 import com.arcsus.arctv.data.Season
 import com.arcsus.arctv.data.Source
+import com.arcsus.arctv.data.TitleDetails
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -74,6 +75,17 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
 
     private val _sheet = MutableStateFlow<Sheet>(Sheet.Hidden)
     val sheet: StateFlow<Sheet> = _sheet
+
+    /** The TMDB-style details page, or null when closed. */
+    data class DetailUi(
+        val item: CatalogItem,
+        val details: TitleDetails? = null,
+        val loading: Boolean = true,
+    )
+
+    private val _detail = MutableStateFlow<DetailUi?>(null)
+    val detail: StateFlow<DetailUi?> = _detail
+    private val detailsCache = mutableMapOf<String, TitleDetails>()
 
     private val _playRequest = MutableStateFlow<ResolvedStream?>(null)
     val playRequest: StateFlow<ResolvedStream?> = _playRequest
@@ -184,6 +196,34 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
     }
 
     fun clearSearch() = _state.update { it.copy(query = "", searchResults = null, error = null) }
+
+    /** Show the details page for a chosen poster, loading extended metadata. */
+    fun openDetails(item: CatalogItem) {
+        val key = "${item.type}:${item.id}"
+        val cached = detailsCache[key]
+        _detail.value = DetailUi(item, cached, loading = cached == null)
+        if (cached != null) return
+        viewModelScope.launch {
+            try {
+                val d = repository.details(item)
+                detailsCache[key] = d
+                if (_detail.value?.item?.id == item.id) _detail.value = DetailUi(item, d, loading = false)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (_detail.value?.item?.id == item.id) _detail.value = DetailUi(item, null, loading = false)
+            }
+        }
+    }
+
+    fun closeDetails() {
+        _detail.value = null
+    }
+
+    /** Play from the details page: run the existing source search. */
+    fun playFromDetails() {
+        _detail.value?.item?.let { openTitle(it) }
+    }
 
     /** Entry point when a poster is chosen: movies go straight to sources, TV to seasons. */
     fun openTitle(item: CatalogItem) {

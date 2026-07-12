@@ -59,6 +59,24 @@ data class Source(
 )
 
 @Serializable
+data class TitleDetails(
+    val id: Int = 0,
+    val type: String = "movie",
+    val title: String = "",
+    val year: String = "",
+    val poster: String = "",
+    val backdrop: String = "",
+    val overview: String = "",
+    val rating: Double = 0.0,
+    val genres: List<String> = emptyList(),
+    val runtime: Int? = null,
+    val tagline: String = "",
+    val seasons: Int? = null,
+) {
+    val isTv: Boolean get() = type == "tv"
+}
+
+@Serializable
 private data class HomeResponse(val rows: List<CatalogRow> = emptyList(), val error: String? = null)
 
 @Serializable
@@ -122,6 +140,11 @@ class BrowseRepository(private val tokenStore: TokenStore) {
 
     suspend fun genres(): Genres = call { rd ->
         json.decodeFromString<Genres>(post(buildJsonObject { put("action", "genres") }, rd))
+    }
+
+    suspend fun details(item: CatalogItem): TitleDetails = call { rd ->
+        val body = buildJsonObject { put("action", "details"); put("id", item.id); put("type", item.type) }
+        json.decodeFromString<TitleDetails>(post(body, rd))
     }
 
     suspend fun discover(type: String, genreId: Int?, sort: String, page: Int): DiscoverPage = call { rd ->

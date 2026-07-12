@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,6 +42,10 @@ import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +53,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Card
@@ -65,6 +71,7 @@ import com.arcsus.arctv.ui.theme.ArcBlue
 fun BrowseScreen(viewModel: BrowseViewModel) {
     val state by viewModel.state.collectAsState()
     val sheet by viewModel.sheet.collectAsState()
+    val detail by viewModel.detail.collectAsState()
     val playRequest by viewModel.playRequest.collectAsState()
     val context = LocalContext.current
 
@@ -149,6 +156,8 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
         }
     }
 
+    detail?.let { d -> DetailsScreen(d, viewModel) }
+
     SheetHost(sheet, viewModel)
 
     autoNext?.let { n ->
@@ -192,7 +201,7 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
                 Spacer(Modifier.height(8.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     items(row.items, key = { it.type + it.id }) { item ->
-                        PosterTile(item, Modifier.width(140.dp)) { viewModel.openTitle(item) }
+                        PosterTile(item, Modifier.width(140.dp)) { viewModel.openDetails(item) }
                     }
                 }
             }
@@ -260,7 +269,7 @@ private fun DiscoverGrid(viewModel: BrowseViewModel) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 gridItems(state.discoverItems, key = { it.type + it.id }) { item ->
-                    PosterTile(item, Modifier) { viewModel.openTitle(item) }
+                    PosterTile(item, Modifier) { viewModel.openDetails(item) }
                 }
             }
         }
@@ -292,7 +301,7 @@ private fun SearchResults(results: List<CatalogItem>, searching: Boolean, viewMo
             modifier = Modifier.fillMaxSize(),
         ) {
             gridItems(results, key = { it.type + it.id }) { item ->
-                PosterTile(item, Modifier) { viewModel.openTitle(item) }
+                PosterTile(item, Modifier) { viewModel.openDetails(item) }
             }
         }
     }
@@ -325,6 +334,81 @@ private fun PosterTile(item: CatalogItem, modifier: Modifier = Modifier, onClick
                 Text(item.title, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (item.year.isNotBlank()) {
                     Text(item.year, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+// ---- Details page ----
+
+@Composable
+private fun DetailsScreen(ui: BrowseViewModel.DetailUi, viewModel: BrowseViewModel) {
+    val item = ui.item
+    val d = ui.details
+    val title = d?.title?.takeIf { it.isNotBlank() } ?: item.title
+    val year = d?.year?.takeIf { it.isNotBlank() } ?: item.year
+    val overview = d?.overview?.takeIf { it.isNotBlank() } ?: item.overview
+    val backdrop = d?.backdrop?.takeIf { it.isNotBlank() }
+    val tagline = d?.tagline
+    val bg = MaterialTheme.colorScheme.background
+    val playFocus = remember { FocusRequester() }
+    LaunchedEffect(item.id) { runCatching { playFocus.requestFocus() } }
+
+    val meta = buildList {
+        if (year.isNotBlank()) add(year)
+        if (item.isTv) add(d?.seasons?.let { "$it season${if (it == 1) "" else "s"}" } ?: "TV")
+        d?.runtime?.let { if (it > 0) add(if (it >= 60) "${it / 60}h ${it % 60}m" else "${it}m") }
+        d?.rating?.let { if (it > 0) add("★ %.1f".format(it)) }
+    }.joinToString("   •   ")
+
+    Dialog(
+        onDismissRequest = { viewModel.closeDetails() },
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(Modifier.fillMaxSize().background(bg)) {
+            if (backdrop != null) {
+                AsyncImage(
+                    model = backdrop,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxHeight(0.75f).fillMaxWidth().align(Alignment.TopEnd),
+                )
+                Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(bg, bg.copy(alpha = 0.55f), Color.Transparent))))
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, bg))))
+            }
+
+            Column(Modifier.fillMaxSize().padding(48.dp)) {
+                OutlinedButton(onClick = { viewModel.closeDetails() }) { Text("← Back") }
+                Spacer(Modifier.weight(1f))
+                Column(Modifier.fillMaxWidth(0.62f)) {
+                    Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (meta.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(meta, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (!tagline.isNullOrBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(tagline, style = MaterialTheme.typography.bodyMedium, color = ArcBlue)
+                    }
+                    Spacer(Modifier.height(18.dp))
+                    Button(
+                        onClick = { viewModel.playFromDetails() },
+                        modifier = Modifier.focusRequester(playFocus),
+                        colors = ButtonDefaults.colors(containerColor = ArcBlue, contentColor = MaterialTheme.colorScheme.onPrimary),
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (item.isTv) "Play — pick an episode" else "Play")
+                    }
+                    if (overview.isNotBlank()) {
+                        Spacer(Modifier.height(20.dp))
+                        Text(overview, style = MaterialTheme.typography.bodyLarge, maxLines = 5, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (ui.loading) {
+                        Spacer(Modifier.height(12.dp))
+                        Text("Loading details…", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }
