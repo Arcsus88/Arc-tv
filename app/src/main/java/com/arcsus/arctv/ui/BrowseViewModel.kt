@@ -19,6 +19,9 @@ import kotlinx.coroutines.launch
 
 enum class BrowseTab { HOME, MOVIES, TV }
 
+/** The episode that plays after the current one (may be in the next season). */
+data class NextEp(val season: Int, val episode: Int)
+
 enum class SortMode(val key: String, val label: String) {
     POPULAR("popular", "Popular"),
     TOP_RATED("top_rated", "Top rated"),
@@ -40,7 +43,7 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
             val sources: List<Source>,
             val playing: String? = null, // magnet currently being played
             val note: String? = null,
-            val nextEpisode: Int? = null, // next episode in this season, if any
+            val next: NextEp? = null, // what plays next (may roll into next season)
         ) : Sheet
         data class Error(val message: String) : Sheet
     }
@@ -225,41 +228,69 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
 
     private fun loadSources(item: CatalogItem, season: Int?, episode: Int?) {
         val key = "${item.id}:${season ?: ""}:${episode ?: ""}"
-        val nextEp = nextEpisodeNumber(item, season, episode)
         sourcesCache[key]?.let {
-            _sheet.value = Sheet.Sources(item, season, episode, it, nextEpisode = nextEp)
-            prefetchNext(item, season, episode)
+            _sheet.value = Sheet.Sources(item, season, episode, it)
+            prepareNext(item, season, episode)
             return
         }
         _sheet.value = Sheet.Loading("Finding sources…")
         launchSheet {
             val sources = repository.sources(item, season, episode)
-            _sheet.value = if (sources.isEmpty()) {
-                Sheet.Error("No sources found for this title.")
+            if (sources.isEmpty()) {
+                _sheet.value = Sheet.Error("No sources found for this title.")
             } else {
                 sourcesCache[key] = sources
-                prefetchNext(item, season, episode)
-                Sheet.Sources(item, season, episode, sources, nextEpisode = nextEp)
+                _sheet.value = Sheet.Sources(item, season, episode, sources)
+                prepareNext(item, season, episode)
             }
         }
     }
 
-    /** The episode number after [episode] in the same season, from cached lists. */
-    private fun nextEpisodeNumber(item: CatalogItem, season: Int?, episode: Int?): Int? {
+    /**
+     * What plays after this episode: the next episode in the season, or — when
+     * this is the season finale — episode 1 of the next season. Loads episode/
+     * season lists on demand (cached).
+     */
+    private suspend fun resolveNext(item: CatalogItem, season: Int?, episode: Int?): NextEp? {
         if (season == null || episode == null) return null
-        val eps = episodesCache["${item.id}:$season"] ?: return null
+        val eps = episodesFor(item, season) ?: return null
         val idx = eps.indexOfFirst { it.episode == episode }
-        return if (idx >= 0 && idx + 1 < eps.size) eps[idx + 1].episode else null
+        if (idx >= 0 && idx + 1 < eps.size) return NextEp(season, eps[idx + 1].episode)
+        // Season finale — roll over to the first episode of the next season.
+        val seasons = seasonsFor(item) ?: return null
+        val nextSeason = seasons.filter { it.number > season }.minByOrNull { it.number } ?: return null
+        val first = episodesFor(item, nextSeason.number)?.firstOrNull() ?: return null
+        return NextEp(nextSeason.number, first.episode)
     }
 
-    /** Warm the next episode's source list in the background so it's instant. */
-    private fun prefetchNext(item: CatalogItem, season: Int?, episode: Int?) {
-        val nextEp = nextEpisodeNumber(item, season, episode) ?: return
-        val key = "${item.id}:$season:$nextEp"
-        if (sourcesCache.containsKey(key)) return
+    private suspend fun episodesFor(item: CatalogItem, season: Int): List<Episode>? {
+        episodesCache["${item.id}:$season"]?.let { return it }
+        val eps = runCatching { repository.episodes(item, season) }.getOrNull()
+        if (!eps.isNullOrEmpty()) episodesCache["${item.id}:$season"] = eps
+        return eps
+    }
+
+    private suspend fun seasonsFor(item: CatalogItem): List<Season>? {
+        seasonsCache[item.id]?.let { return it }
+        val seasons = runCatching { repository.seasons(item) }.getOrNull()
+        if (!seasons.isNullOrEmpty()) seasonsCache[item.id] = seasons
+        return seasons
+    }
+
+    /** Resolve the next episode, label the current sheet, and warm its sources. */
+    private fun prepareNext(item: CatalogItem, season: Int?, episode: Int?) {
         viewModelScope.launch {
-            runCatching { repository.sources(item, season, nextEp) }.getOrNull()?.let {
-                if (it.isNotEmpty()) sourcesCache[key] = it
+            val n = resolveNext(item, season, episode) ?: return@launch
+            (_sheet.value as? Sheet.Sources)?.let { cur ->
+                if (cur.item.id == item.id && cur.season == season && cur.episode == episode) {
+                    _sheet.value = cur.copy(next = n)
+                }
+            }
+            val key = "${item.id}:${n.season}:${n.episode}"
+            if (!sourcesCache.containsKey(key)) {
+                runCatching { repository.sources(item, n.season, n.episode) }.getOrNull()?.let {
+                    if (it.isNotEmpty()) sourcesCache[key] = it
+                }
             }
         }
     }
@@ -267,16 +298,15 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
     /** Load and play the best source of the next episode (auto-advance / one-tap). */
     fun playNextEpisode() {
         val s = _sheet.value as? Sheet.Sources ?: return
-        val season = s.season ?: return
-        val nextEp = s.nextEpisode ?: nextEpisodeNumber(s.item, season, s.episode) ?: return
         viewModelScope.launch {
-            val key = "${s.item.id}:$season:$nextEp"
+            val n = s.next ?: resolveNext(s.item, s.season, s.episode) ?: return@launch
+            val key = "${s.item.id}:${n.season}:${n.episode}"
             val sources = sourcesCache[key] ?: runCatching {
-                repository.sources(s.item, season, nextEp)
+                repository.sources(s.item, n.season, n.episode)
             }.getOrNull()?.also { if (it.isNotEmpty()) sourcesCache[key] = it }
             if (sources.isNullOrEmpty()) return@launch
-            val nextNext = nextEpisodeNumber(s.item, season, nextEp)
-            _sheet.value = Sheet.Sources(s.item, season, nextEp, sources, nextEpisode = nextNext)
+            _sheet.value = Sheet.Sources(s.item, n.season, n.episode, sources)
+            prepareNext(s.item, n.season, n.episode)
             sources.firstOrNull()?.let { playSource(it) }
         }
     }

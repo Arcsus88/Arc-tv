@@ -332,13 +332,19 @@ private fun SheetHost(sheet: BrowseViewModel.Sheet, viewModel: BrowseViewModel) 
                     Spacer(Modifier.width(8.dp))
                     Text("Auto-play best")
                 }
-                if (s.nextEpisode != null) {
+                val nextEp = s.next
+                if (nextEp != null) {
                     Spacer(Modifier.width(12.dp))
+                    val label = if (nextEp.season != s.season) {
+                        "Next: S%02dE%02d".format(nextEp.season, nextEp.episode)
+                    } else {
+                        "Next: E%02d".format(nextEp.episode)
+                    }
                     OutlinedButton(
                         onClick = { viewModel.playNextEpisode() },
                         enabled = s.playing == null,
                     ) {
-                        Text("Next: E%02d".format(s.nextEpisode))
+                        Text(label)
                     }
                 }
             }
