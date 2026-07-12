@@ -6,6 +6,8 @@ import com.arcsus.arctv.data.BrowseRepository
 import com.arcsus.arctv.data.CatalogItem
 import com.arcsus.arctv.data.CatalogRow
 import com.arcsus.arctv.data.Episode
+import com.arcsus.arctv.data.Genre
+import com.arcsus.arctv.data.Genres
 import com.arcsus.arctv.data.ResolvedStream
 import com.arcsus.arctv.data.Season
 import com.arcsus.arctv.data.Source
@@ -14,6 +16,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+enum class BrowseTab { HOME, MOVIES, TV }
+
+enum class SortMode(val key: String, val label: String) {
+    POPULAR("popular", "Popular"),
+    TOP_RATED("top_rated", "Top rated"),
+    NEWEST("newest", "Newest"),
+}
 
 class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
 
@@ -41,7 +51,19 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
         val searching: Boolean = false,
         val searchResults: List<CatalogItem>? = null,
         val error: String? = null,
-    )
+        // Full-catalogue browsing
+        val tab: BrowseTab = BrowseTab.HOME,
+        val genres: Genres = Genres(),
+        val genreId: Int? = null,
+        val sortMode: SortMode = SortMode.POPULAR,
+        val discoverItems: List<CatalogItem> = emptyList(),
+        val discoverPage: Int = 0,
+        val discoverTotalPages: Int = 1,
+        val discoverLoading: Boolean = false,
+    ) {
+        val currentGenres: List<Genre>
+            get() = if (tab == BrowseTab.TV) genres.tv else genres.movie
+    }
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state
@@ -54,6 +76,68 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
 
     init {
         loadHome()
+        loadGenres()
+    }
+
+    private fun loadGenres() {
+        viewModelScope.launch {
+            try {
+                _state.update { it.copy(genres = repository.genres()) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Non-fatal; genre chips just won't show.
+            }
+        }
+    }
+
+    fun setTab(tab: BrowseTab) {
+        if (tab == _state.value.tab) return
+        _state.update { it.copy(tab = tab, genreId = null) }
+        if (tab != BrowseTab.HOME) reloadDiscover()
+    }
+
+    fun setGenre(genreId: Int?) {
+        if (genreId == _state.value.genreId) return
+        _state.update { it.copy(genreId = genreId) }
+        reloadDiscover()
+    }
+
+    fun setSort(sort: SortMode) {
+        if (sort == _state.value.sortMode) return
+        _state.update { it.copy(sortMode = sort) }
+        reloadDiscover()
+    }
+
+    private fun reloadDiscover() {
+        _state.update { it.copy(discoverItems = emptyList(), discoverPage = 0, discoverTotalPages = 1) }
+        loadMoreDiscover()
+    }
+
+    fun loadMoreDiscover() {
+        val s = _state.value
+        if (s.tab == BrowseTab.HOME || s.discoverLoading || s.discoverPage >= s.discoverTotalPages) return
+        val type = if (s.tab == BrowseTab.TV) "tv" else "movie"
+        val nextPage = s.discoverPage + 1
+        _state.update { it.copy(discoverLoading = true, error = null) }
+        viewModelScope.launch {
+            try {
+                val result = repository.discover(type, s.genreId, s.sortMode.key, nextPage)
+                _state.update {
+                    it.copy(
+                        discoverLoading = false,
+                        // Dedupe across pages so grid keys stay unique.
+                        discoverItems = (it.discoverItems + result.items).distinctBy { i -> i.type + i.id },
+                        discoverPage = result.page,
+                        discoverTotalPages = result.totalPages,
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(discoverLoading = false, error = e.message ?: "Couldn't load catalogue.") }
+            }
+        }
     }
 
     fun loadHome() {

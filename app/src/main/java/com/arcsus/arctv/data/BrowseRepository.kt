@@ -29,6 +29,20 @@ data class CatalogItem(
 data class CatalogRow(val title: String = "", val items: List<CatalogItem> = emptyList())
 
 @Serializable
+data class Genre(val id: Int = 0, val name: String = "")
+
+@Serializable
+data class Genres(val movie: List<Genre> = emptyList(), val tv: List<Genre> = emptyList())
+
+@Serializable
+data class DiscoverPage(
+    val items: List<CatalogItem> = emptyList(),
+    val page: Int = 1,
+    val totalPages: Int = 1,
+    val error: String? = null,
+)
+
+@Serializable
 data class Season(val number: Int = 0, val name: String = "", val episodeCount: Int = 0)
 
 @Serializable
@@ -104,6 +118,23 @@ class BrowseRepository(private val tokenStore: TokenStore) {
         val p = json.decodeFromString<SearchResponse>(post(body, rd))
         p.error?.let { throw BrowseException(it) }
         p.items
+    }
+
+    suspend fun genres(): Genres = call { rd ->
+        json.decodeFromString<Genres>(post(buildJsonObject { put("action", "genres") }, rd))
+    }
+
+    suspend fun discover(type: String, genreId: Int?, sort: String, page: Int): DiscoverPage = call { rd ->
+        val body = buildJsonObject {
+            put("action", "discover")
+            put("type", type)
+            if (genreId != null && genreId != 0) put("genre", genreId)
+            put("sort", sort)
+            put("page", page)
+        }
+        val p = json.decodeFromString<DiscoverPage>(post(body, rd))
+        p.error?.let { throw BrowseException(it) }
+        p
     }
 
     suspend fun seasons(item: CatalogItem): List<Season> = call { rd ->

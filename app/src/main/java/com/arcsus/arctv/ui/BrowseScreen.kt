@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -32,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
@@ -43,9 +45,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Card
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
@@ -90,8 +94,11 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
             }
         }
 
+        if (state.searchResults == null) FilterBar(viewModel)
+
         when {
             state.searchResults != null -> SearchResults(state.searchResults!!, state.searching, viewModel)
+            state.tab != BrowseTab.HOME -> DiscoverGrid(viewModel)
             state.loadingHome && state.rows.isEmpty() -> CenteredMessage("Loading catalogue…")
             state.error != null && state.rows.isEmpty() -> CenteredError(state.error!!) { viewModel.loadHome() }
             else -> CatalogRows(viewModel)
@@ -120,6 +127,85 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun FilterBar(viewModel: BrowseViewModel) {
+    val state by viewModel.state.collectAsState()
+    Column(Modifier.padding(bottom = 12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            BrowseTab.entries.forEach { tab ->
+                Chip(
+                    label = when (tab) {
+                        BrowseTab.HOME -> "Home"
+                        BrowseTab.MOVIES -> "Movies"
+                        BrowseTab.TV -> "TV Shows"
+                    },
+                    selected = state.tab == tab,
+                    onClick = { viewModel.setTab(tab) },
+                )
+            }
+            if (state.tab != BrowseTab.HOME) {
+                Spacer(Modifier.width(24.dp))
+                SortMode.entries.forEach { mode ->
+                    Chip(label = mode.label, selected = state.sortMode == mode, onClick = { viewModel.setSort(mode) })
+                    Spacer(Modifier.width(8.dp))
+                }
+            }
+        }
+        if (state.tab != BrowseTab.HOME && state.currentGenres.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    Chip(label = "All", selected = state.genreId == null, onClick = { viewModel.setGenre(null) })
+                }
+                items(state.currentGenres, key = { it.id }) { genre ->
+                    Chip(label = genre.name, selected = state.genreId == genre.id, onClick = { viewModel.setGenre(genre.id) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiscoverGrid(viewModel: BrowseViewModel) {
+    val state by viewModel.state.collectAsState()
+    when {
+        state.discoverItems.isEmpty() && state.discoverLoading -> CenteredMessage("Loading…")
+        state.discoverItems.isEmpty() -> CenteredMessage("Nothing here.")
+        else -> {
+            val gridState = rememberLazyGridState()
+            val count = state.discoverItems.size
+            LaunchedEffect(gridState, count) {
+                snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
+                    .collect { last -> if (last >= count - 12) viewModel.loadMoreDiscover() }
+            }
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(7),
+                state = gridState,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(bottom = 32.dp, top = 4.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                gridItems(state.discoverItems, key = { it.type + it.id }) { item ->
+                    PosterTile(item, Modifier) { viewModel.openTitle(item) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
+    if (selected) {
+        Button(
+            onClick = onClick,
+            colors = ButtonDefaults.colors(containerColor = ArcBlue, contentColor = MaterialTheme.colorScheme.onPrimary),
+        ) { Text(label) }
+    } else {
+        OutlinedButton(onClick = onClick) { Text(label) }
     }
 }
 
