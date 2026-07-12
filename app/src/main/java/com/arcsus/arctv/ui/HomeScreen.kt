@@ -29,11 +29,12 @@ import androidx.tv.material3.Tab
 import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
 
-private val TABS = listOf("Downloads", "Torrents")
+private val TABS = listOf("Browse", "Downloads", "Torrents")
 
 @Composable
 fun HomeScreen(factory: ArcTvViewModelFactory) {
     val updateViewModel: UpdateViewModel = viewModel(factory = factory)
+    val browseViewModel: BrowseViewModel = viewModel(factory = factory)
     val downloadsViewModel: DownloadsViewModel = viewModel(factory = factory)
     val torrentsViewModel: TorrentsViewModel = viewModel(factory = factory)
 
@@ -93,8 +94,9 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         }
 
         when (selectedTab) {
-            0 -> DownloadsScreen(downloadsViewModel)
-            1 -> TorrentsScreen(torrentsViewModel)
+            0 -> BrowseScreen(browseViewModel)
+            1 -> DownloadsScreen(downloadsViewModel)
+            2 -> TorrentsScreen(torrentsViewModel)
         }
     }
 }
