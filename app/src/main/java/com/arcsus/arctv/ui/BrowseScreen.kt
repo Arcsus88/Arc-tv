@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -36,7 +35,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -82,11 +80,12 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
         ) {
             Text("Browse", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(24.dp))
-            SearchField(
+            TvSearchField(
                 query = state.query,
                 onQueryChange = viewModel::setQuery,
                 onSearch = viewModel::search,
                 modifier = Modifier.weight(1f),
+                placeholder = "Search films & shows…",
             )
             if (state.searchResults != null) {
                 Spacer(Modifier.width(12.dp))
@@ -411,39 +410,6 @@ private fun qualityLabel(title: String): String {
         else -> ""
     }
     return if (src.isBlank()) res else "$res · $src"
-}
-
-@Composable
-private fun SearchField(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onSearch: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(shape = RoundedCornerShape(24.dp), modifier = modifier) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        ) {
-            Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(10.dp))
-            Box(Modifier.weight(1f)) {
-                if (query.isEmpty()) {
-                    Text("Search films & shows…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                BasicTextField(
-                    value = query,
-                    onValueChange = onQueryChange,
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-                    cursorBrush = SolidColor(ArcBlue),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-    }
 }
 
 @Composable

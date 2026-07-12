@@ -22,7 +22,6 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -36,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -96,10 +94,12 @@ fun TorrentsScreen(viewModel: TorrentsViewModel) {
                 Spacer(Modifier.width(8.dp))
             }
             Spacer(Modifier.weight(1f))
-            SearchField(
+            TvSearchField(
                 query = state.query,
                 onQueryChange = { viewModel.setQuery(it) },
+                onSearch = {},
                 modifier = Modifier.width(300.dp),
+                placeholder = "Search…",
             )
             Spacer(Modifier.width(12.dp))
             Button(onClick = { viewModel.refresh() }) {
@@ -236,43 +236,6 @@ private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
         ) { Text(label) }
     } else {
         OutlinedButton(onClick = onClick) { Text(label) }
-    }
-}
-
-@Composable
-private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
-    Surface(shape = RoundedCornerShape(24.dp), modifier = modifier) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-        ) {
-            Icon(
-                Icons.Default.Search,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(10.dp))
-            Box(Modifier.weight(1f)) {
-                if (query.isEmpty()) {
-                    Text(
-                        "Search…",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                BasicTextField(
-                    value = query,
-                    onValueChange = onQueryChange,
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    cursorBrush = SolidColor(ArcBlue),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
     }
 }
 
