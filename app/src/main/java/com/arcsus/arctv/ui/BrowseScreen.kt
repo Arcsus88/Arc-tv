@@ -1,6 +1,5 @@
 package com.arcsus.arctv.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,16 +13,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,28 +32,42 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.Button
 import androidx.tv.material3.Card
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import com.arcsus.arctv.data.BrowseResult
+import coil.compose.AsyncImage
+import com.arcsus.arctv.data.CatalogItem
 import com.arcsus.arctv.ui.theme.ArcBlue
 
 @Composable
 fun BrowseScreen(viewModel: BrowseViewModel) {
     val state by viewModel.state.collectAsState()
+    val playRequest by viewModel.playRequest.collectAsState()
     val context = LocalContext.current
 
+    LaunchedEffect(playRequest) {
+        playRequest?.let { stream ->
+            if (!playVideo(context, stream.streamUrl, stream.filename)) {
+                android.widget.Toast.makeText(
+                    context, "No video player installed.", android.widget.Toast.LENGTH_LONG,
+                ).show()
+            }
+            viewModel.consumePlayRequest()
+        }
+    }
     LaunchedEffect(state.message) {
         state.message?.let {
-            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
             viewModel.clearMessage()
         }
     }
@@ -63,46 +77,48 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
         ) {
-            Text(
-                "Browse",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
+            Text("Browse", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(24.dp))
-            BrowseSearchField(
+            SearchField(
                 query = state.query,
                 onQueryChange = viewModel::setQuery,
                 onSearch = viewModel::search,
                 modifier = Modifier.weight(1f),
             )
-            Spacer(Modifier.width(12.dp))
-            Button(onClick = { viewModel.search() }, enabled = !state.searching) {
-                Text(if (state.searching) "Searching…" else "Search")
+            if (state.searchResults != null) {
+                Spacer(Modifier.width(12.dp))
+                Button(onClick = { viewModel.clearSearch() }) { Text("Clear") }
             }
         }
 
         when {
-            state.searching && state.results.isEmpty() -> CenteredMessage("Searching torrents…")
-            state.error != null && state.results.isEmpty() -> CenteredError(state.error!!) {
-                viewModel.search()
-            }
-            !state.searched -> CenteredMessage("Search for a film or show to add it to Real-Debrid.")
-            state.results.isEmpty() -> CenteredMessage("No results for \"${state.query}\".")
-            else -> {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(5),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(bottom = 32.dp, top = 4.dp),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    items(state.results, key = { it.magnet }) { result ->
-                        BrowseCard(
-                            result = result,
-                            adding = result.magnet in state.adding,
-                            added = result.magnet in state.added,
-                            onClick = { viewModel.add(result) },
-                        )
+            state.searchResults != null -> SearchResults(state.searchResults!!, state.searching, viewModel)
+            state.loadingHome && state.rows.isEmpty() -> CenteredMessage("Loading catalogue…")
+            state.error != null && state.rows.isEmpty() -> CenteredError(state.error!!) { viewModel.loadHome() }
+            else -> CatalogRows(viewModel)
+        }
+    }
+
+    state.resolving?.let { item ->
+        ResolvingDialog(item.title)
+    }
+}
+
+@Composable
+private fun CatalogRows(viewModel: BrowseViewModel) {
+    val state by viewModel.state.collectAsState()
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+        contentPadding = PaddingValues(bottom = 32.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        items(state.rows, key = { it.title }) { row ->
+            Column {
+                Text(row.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    items(row.items, key = { it.type + it.title + it.year }) { item ->
+                        PosterTile(item, Modifier.width(140.dp)) { viewModel.play(item) }
                     }
                 }
             }
@@ -111,7 +127,71 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
 }
 
 @Composable
-private fun BrowseSearchField(
+private fun SearchResults(results: List<CatalogItem>, searching: Boolean, viewModel: BrowseViewModel) {
+    when {
+        searching && results.isEmpty() -> CenteredMessage("Searching…")
+        results.isEmpty() -> CenteredMessage("No results.")
+        else -> LazyVerticalGrid(
+            columns = GridCells.Fixed(6),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(bottom = 32.dp, top = 4.dp),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            gridItems(results, key = { it.type + it.title + it.year }) { item ->
+                PosterTile(item, Modifier) { viewModel.play(item) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PosterTile(item: CatalogItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = modifier) {
+        Column {
+            Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
+                AsyncImage(
+                    model = item.poster,
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Text(
+                    if (item.type == "tv") "TV" else "Film",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ArcBlue,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                            RoundedCornerShape(6.dp),
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+            Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (item.year.isNotBlank()) {
+                    Text(
+                        item.year,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchField(
     query: String,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
@@ -155,80 +235,28 @@ private fun BrowseSearchField(
 }
 
 @Composable
-private fun BrowseCard(
-    result: BrowseResult,
-    adding: Boolean,
-    added: Boolean,
-    onClick: () -> Unit,
-) {
-    Card(onClick = onClick) {
-        Column {
-            Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
-                PosterImage(rememberPosterUrl(result.title), Modifier.fillMaxSize())
-                // Seed count, top-left.
+private fun ResolvingDialog(title: String) {
+    Dialog(onDismissRequest = {}) {
+        Surface(shape = RoundedCornerShape(16.dp)) {
+            Column(
+                Modifier.padding(32.dp).width(420.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("Finding a source", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(10.dp))
                 Text(
-                    "▲ ${result.seeds}",
-                    style = MaterialTheme.typography.labelSmall,
+                    title,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = ArcBlue,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp)
-                        .background(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                            RoundedCornerShape(6.dp),
-                        )
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
-                // Add state indicator, top-right.
-                val (icon, tint) = when {
-                    added -> Icons.Default.Check to ArcBlue
-                    else -> Icons.Default.Add to MaterialTheme.colorScheme.onSurface
-                }
-                Icon(
-                    icon,
-                    contentDescription = if (added) "Added" else "Add",
-                    tint = tint,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .background(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                            RoundedCornerShape(6.dp),
-                        )
-                        .padding(4.dp)
-                        .size(16.dp),
-                )
-            }
-            Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                Spacer(Modifier.height(14.dp))
                 Text(
-                    cleanTitle(result.title),
+                    "Searching for the best playable copy and adding it to Real-Debrid. This can take up to a minute.",
                     style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    when {
-                        adding -> "Adding…"
-                        added -> "Added ✓"
-                        else -> "${result.size}"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (added || adding) ArcBlue else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
     }
 }
-
-private fun cleanTitle(raw: String): String =
-    com.arcsus.arctv.data.FilenameParser.parse(raw)?.let { m ->
-        buildString {
-            append(m.title)
-            m.year?.let { append(" (").append(it).append(")") }
-            m.episodeLabel?.let { append(" ").append(it) }
-        }
-    } ?: raw

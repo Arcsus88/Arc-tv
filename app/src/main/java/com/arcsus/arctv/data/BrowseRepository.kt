@@ -14,34 +14,41 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 @Serializable
-data class BrowseResult(
+data class CatalogItem(
+    val type: String = "movie",
     val title: String = "",
-    val size: String = "",
-    val seeds: Int = 0,
-    val leeches: Int = 0,
-    val magnet: String = "",
-    val origin: String = "",
+    val year: String = "",
+    val poster: String = "",
+    val overview: String = "",
 )
 
 @Serializable
-private data class SearchResponse(
-    val results: List<BrowseResult> = emptyList(),
-    val error: String? = null,
-)
+data class CatalogRow(val title: String = "", val items: List<CatalogItem> = emptyList())
 
 @Serializable
-private data class AddResponse(
+private data class HomeResponse(val rows: List<CatalogRow> = emptyList(), val error: String? = null)
+
+@Serializable
+private data class SearchResponse(val items: List<CatalogItem> = emptyList(), val error: String? = null)
+
+@Serializable
+private data class ResolveResponse(
     val ok: Boolean = false,
-    val id: String? = null,
+    val streamUrl: String? = null,
+    val filename: String? = null,
+    val quality: String? = null,
     val error: String? = null,
 )
 
 class BrowseException(message: String) : Exception(message)
 
+/** Playable result of resolving a catalog title through the backend. */
+data class ResolvedStream(val streamUrl: String, val filename: String)
+
 /**
- * Talks to the Arc TV browse Edge Function: searches torrents via Apify and adds
- * a chosen magnet to Real-Debrid. The caller's RD access token is sent so the
- * function verifies it and adds to the signed-in account.
+ * Talks to the Arc TV Edge Function: TMDB catalog (home/search) plus resolve,
+ * which finds a working, cached torrent for a title and returns a playable link.
+ * The caller's RD token is sent so the backend adds to the signed-in account.
  */
 class BrowseRepository(private val tokenStore: TokenStore) {
 
@@ -53,36 +60,48 @@ class BrowseRepository(private val tokenStore: TokenStore) {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(90, TimeUnit.SECONDS) // Apify runs can take a while
+        .readTimeout(120, TimeUnit.SECONDS) // resolve can try several sources
         .build()
     private val json = Json { ignoreUnknownKeys = true }
     private val jsonMedia = "application/json".toMediaType()
 
-    suspend fun search(query: String): List<BrowseResult> {
+    suspend fun home(): List<CatalogRow> {
+        val rdToken = requireToken()
+        return withContext(Dispatchers.IO) {
+            val text = post(buildJsonObject { put("action", "home") }, rdToken)
+            val parsed = json.decodeFromString<HomeResponse>(text)
+            if (parsed.error != null) throw BrowseException(parsed.error)
+            parsed.rows
+        }
+    }
+
+    suspend fun search(query: String): List<CatalogItem> {
         val rdToken = requireToken()
         return withContext(Dispatchers.IO) {
             val body = buildJsonObject {
                 put("action", "search")
                 put("query", query)
             }
-            val response = post(body, rdToken)
-            val parsed = json.decodeFromString<SearchResponse>(response)
+            val parsed = json.decodeFromString<SearchResponse>(post(body, rdToken))
             if (parsed.error != null) throw BrowseException(parsed.error)
-            parsed.results
+            parsed.items
         }
     }
 
-    suspend fun add(magnet: String): String {
+    suspend fun resolve(item: CatalogItem): ResolvedStream {
         val rdToken = requireToken()
         return withContext(Dispatchers.IO) {
             val body = buildJsonObject {
-                put("action", "add")
-                put("magnet", magnet)
+                put("action", "resolve")
+                put("title", item.title)
+                put("year", item.year)
+                put("type", item.type)
             }
-            val response = post(body, rdToken)
-            val parsed = json.decodeFromString<AddResponse>(response)
-            if (!parsed.ok) throw BrowseException(parsed.error ?: "Couldn't add to Real-Debrid.")
-            parsed.id ?: ""
+            val parsed = json.decodeFromString<ResolveResponse>(post(body, rdToken))
+            if (!parsed.ok || parsed.streamUrl == null) {
+                throw BrowseException(parsed.error ?: "No playable source found.")
+            }
+            ResolvedStream(parsed.streamUrl, parsed.filename ?: item.title)
         }
     }
 
