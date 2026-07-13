@@ -52,9 +52,15 @@ fun TvSearchField(
     var active by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    // Reset each time we (re)enter the active state; guards against the field
+    // collapsing on the initial onFocusChanged(false) before requestFocus runs.
+    var everFocused by remember(active) { mutableStateOf(false) }
 
     if (active) {
-        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+        LaunchedEffect(Unit) {
+            focusRequester.requestFocus()
+            keyboard?.show()
+        }
         Surface(shape = RoundedCornerShape(24.dp), modifier = modifier) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -81,7 +87,12 @@ fun TvSearchField(
                         modifier = Modifier
                             .fillMaxWidth()
                             .focusRequester(focusRequester)
-                            .onFocusChanged { if (!it.isFocused) active = false },
+                            .onFocusChanged {
+                                if (it.isFocused) everFocused = true
+                                // Only collapse once it has actually held focus,
+                                // so activating it doesn't instantly close.
+                                else if (everFocused) active = false
+                            },
                     )
                 }
             }
