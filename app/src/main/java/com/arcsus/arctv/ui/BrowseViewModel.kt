@@ -280,16 +280,16 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
             return
         }
         val epoch = ++sourcesEpoch
-        _sheet.value = Sheet.Loading("Finding sources…")
+        // Show the sources sheet straight away (empty + searching) so results
+        // appear in place as soon as the first one is found.
+        _sheet.value = Sheet.Sources(item, season, episode, emptyList(), loadingMore = true)
         viewModelScope.launch {
             var latest: List<Source> = emptyList()
             try {
                 repository.sourcesStream(item, season, episode).collect { partial ->
                     if (epoch != sourcesEpoch) return@collect
                     latest = partial
-                    if (partial.isNotEmpty()) {
-                        _sheet.value = Sheet.Sources(item, season, episode, partial, loadingMore = true)
-                    }
+                    _sheet.value = Sheet.Sources(item, season, episode, partial, loadingMore = true)
                 }
             } catch (e: CancellationException) {
                 throw e

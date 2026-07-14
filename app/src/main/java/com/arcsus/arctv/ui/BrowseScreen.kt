@@ -461,6 +461,10 @@ private fun SheetHost(sheet: BrowseViewModel.Sheet, viewModel: BrowseViewModel) 
         }
 
         is BrowseViewModel.Sheet.Sources -> SheetDialog(sourcesTitle(s), { viewModel.dismissSheet() }) {
+            if (s.sources.isEmpty() && s.loadingMore) {
+                Text("Searching for sources…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                return@SheetDialog
+            }
             if (s.playing != null) {
                 Text("Starting playback…", color = ArcBlue, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(12.dp))
