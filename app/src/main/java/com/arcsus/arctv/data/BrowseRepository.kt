@@ -1,6 +1,9 @@
 package com.arcsus.arctv.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -189,6 +192,41 @@ class BrowseRepository(private val tokenStore: TokenStore) {
         p.error?.let { throw BrowseException(it) }
         p.sources
     }
+
+    /**
+     * Streaming source search: emits a growing, quality-first source list as each
+     * backend query completes, so the UI can show sources as they're found.
+     */
+    fun sourcesStream(item: CatalogItem, season: Int?, episode: Int?): Flow<List<Source>> = flow {
+        val rd = tokenStore.currentTokens()?.accessToken
+            ?: throw BrowseException("Not signed in to Real-Debrid.")
+        val body = buildJsonObject {
+            put("action", "sources_stream")
+            put("title", item.title)
+            put("year", item.year)
+            put("type", item.type)
+            if (season != null) put("season", season)
+            if (episode != null) put("episode", episode)
+        }
+        val request = Request.Builder()
+            .url(FUNCTION_URL)
+            .header("apikey", SUPABASE_KEY)
+            .header("Authorization", "Bearer $SUPABASE_KEY")
+            .header("x-rd-token", rd)
+            .post(body.toString().toRequestBody(jsonMedia))
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (response.code == 401) throw BrowseException("Real-Debrid session expired. Sign in again.")
+            val bodySource = response.body?.source() ?: return@use
+            while (!bodySource.exhausted()) {
+                val line = bodySource.readUtf8Line() ?: break
+                if (line.isBlank()) continue
+                val p = json.decodeFromString<SourcesResponse>(line)
+                p.error?.let { throw BrowseException(it) }
+                emit(p.sources)
+            }
+        }
+    }.flowOn(Dispatchers.IO)
 
     /** Add one chosen magnet to RD and return a playable link (throws if not cached). */
     suspend fun play(source: Source): ResolvedStream = call { rd ->

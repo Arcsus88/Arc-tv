@@ -15,6 +15,7 @@ import com.arcsus.arctv.data.TitleDetails
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -45,6 +46,7 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
             val playing: String? = null, // magnet currently being played
             val note: String? = null,
             val next: NextEp? = null, // what plays next (may roll into next season)
+            val loadingMore: Boolean = false, // still streaming in more sources
         ) : Sheet
         data class Error(val message: String) : Sheet
     }
@@ -266,6 +268,10 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
 
     fun selectEpisode(item: CatalogItem, season: Int, episode: Int) = loadSources(item, season, episode)
 
+    // Bumped each time a source search starts, so a stale stream can't overwrite
+    // the sheet after the user has navigated elsewhere.
+    private var sourcesEpoch = 0
+
     private fun loadSources(item: CatalogItem, season: Int?, episode: Int?) {
         val key = "${item.id}:${season ?: ""}:${episode ?: ""}"
         sourcesCache[key]?.let {
@@ -273,14 +279,32 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
             prepareNext(item, season, episode)
             return
         }
+        val epoch = ++sourcesEpoch
         _sheet.value = Sheet.Loading("Finding sources…")
-        launchSheet {
-            val sources = repository.sources(item, season, episode)
-            if (sources.isEmpty()) {
+        viewModelScope.launch {
+            var latest: List<Source> = emptyList()
+            try {
+                repository.sourcesStream(item, season, episode).collect { partial ->
+                    if (epoch != sourcesEpoch) return@collect
+                    latest = partial
+                    if (partial.isNotEmpty()) {
+                        _sheet.value = Sheet.Sources(item, season, episode, partial, loadingMore = true)
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (epoch == sourcesEpoch && latest.isEmpty()) {
+                    _sheet.value = Sheet.Error(e.message ?: "Couldn't find sources.")
+                    return@launch
+                }
+            }
+            if (epoch != sourcesEpoch) return@launch
+            if (latest.isEmpty()) {
                 _sheet.value = Sheet.Error("No sources found for this title.")
             } else {
-                sourcesCache[key] = sources
-                _sheet.value = Sheet.Sources(item, season, episode, sources)
+                sourcesCache[key] = latest
+                _sheet.value = Sheet.Sources(item, season, episode, latest)
                 prepareNext(item, season, episode)
             }
         }

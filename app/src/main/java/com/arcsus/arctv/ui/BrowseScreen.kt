@@ -491,6 +491,14 @@ private fun SheetHost(sheet: BrowseViewModel.Sheet, viewModel: BrowseViewModel) 
                 Spacer(Modifier.height(8.dp))
                 Text(it, style = MaterialTheme.typography.labelMedium, color = androidx.compose.ui.graphics.Color(0xFFFF6B6B))
             }
+            if (s.loadingMore) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Finding more sources…",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Spacer(Modifier.height(12.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 340.dp)) {
                 items(s.sources, key = { it.magnet }) { source ->
