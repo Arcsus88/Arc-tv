@@ -1,14 +1,22 @@
 # Arc TV
 
-An Android TV client for [Real-Debrid](https://real-debrid.com): browse your
-downloads and torrents from the couch and play them with your favourite video
-player (VLC, Just Player, …).
+An Android TV client for [Real-Debrid](https://real-debrid.com) and
+[AllDebrid](https://alldebrid.com): browse the catalogue, your downloads and
+torrents from the couch and play them with your favourite video player (VLC,
+Just Player, …).
 
 ## Features
 
-- **Device-code sign-in** — no typing credentials with the remote. The app shows
-  a short code; you authorise it at `real-debrid.com/device` from your phone or
-  computer.
+- **Code-based sign-in** — no typing credentials with the remote. Pick
+  Real-Debrid or AllDebrid; the app shows a short code you authorise at
+  `real-debrid.com/device` or `alldebrid.com/pin` from your phone or computer.
+  Playback resolves TorBox-cached first, then Real-Debrid, then AllDebrid
+  (resolved on the device — AllDebrid does not allow server IPs).
+- **Live TV** — save multiple playlists (plain M3U links or Xtream logins) in
+  the Settings tab and browse them by group with search. Xtream loads live
+  channels via `player_api.php`, far faster than a full M3U export.
+- **Settings tab** — connect/disconnect both debrid providers, set a TorBox
+  token, and manage Live TV playlists.
 - **Downloads grid** — your Real-Debrid downloads, newest first, with D-pad
   navigation, file size, host icon and date. Toggle to filter to streamable
   video files (mkv/mp4/avi).

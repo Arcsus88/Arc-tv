@@ -24,6 +24,7 @@ class TokenStore(context: Context) {
         val CLIENT_SECRET = stringPreferencesKey("client_secret")
         val ACCESS_TOKEN = stringPreferencesKey("access_token")
         val REFRESH_TOKEN = stringPreferencesKey("refresh_token")
+        val AD_APIKEY = stringPreferencesKey("ad_apikey")
     }
 
     val tokens: Flow<RdTokens?> = dataStore.data.map { prefs ->
@@ -32,9 +33,36 @@ class TokenStore(context: Context) {
         if (access != null && refresh != null) RdTokens(access, refresh) else null
     }
 
-    val isAuthorized: Flow<Boolean> = tokens.map { it != null }
+    /** AllDebrid API key obtained through the PIN flow (or null when not connected). */
+    val adApiKey: Flow<String?> = dataStore.data.map { prefs -> prefs[Keys.AD_APIKEY] }
+
+    /** Signed in when either debrid provider is connected. */
+    val isAuthorized: Flow<Boolean> = dataStore.data.map { prefs ->
+        (prefs[Keys.ACCESS_TOKEN] != null && prefs[Keys.REFRESH_TOKEN] != null) ||
+            prefs[Keys.AD_APIKEY] != null
+    }
 
     suspend fun currentTokens(): RdTokens? = tokens.first()
+
+    suspend fun currentAdApiKey(): String? = adApiKey.first()
+
+    suspend fun saveAdApiKey(apiKey: String) {
+        dataStore.edit { prefs -> prefs[Keys.AD_APIKEY] = apiKey }
+    }
+
+    suspend fun clearAdApiKey() {
+        dataStore.edit { prefs -> prefs.remove(Keys.AD_APIKEY) }
+    }
+
+    /** Disconnect Real-Debrid only (AllDebrid, if connected, stays signed in). */
+    suspend fun clearRd() {
+        dataStore.edit { prefs ->
+            prefs.remove(Keys.CLIENT_ID)
+            prefs.remove(Keys.CLIENT_SECRET)
+            prefs.remove(Keys.ACCESS_TOKEN)
+            prefs.remove(Keys.REFRESH_TOKEN)
+        }
+    }
 
     suspend fun currentCredentials(): RdCredentials? {
         val prefs = dataStore.data.first()
