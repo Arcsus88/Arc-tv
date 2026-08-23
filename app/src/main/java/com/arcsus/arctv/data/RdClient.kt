@@ -93,7 +93,7 @@ private class RefreshAuthenticator(
                 tokenStore.saveTokens(refreshed.accessToken, refreshed.refreshToken)
                 refreshed.accessToken
             } catch (e: retrofit2.HttpException) {
-                tokenStore.clear()
+                tokenStore.clearRd()
                 null
             } catch (e: Exception) {
                 null

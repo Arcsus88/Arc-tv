@@ -29,17 +29,26 @@ import androidx.tv.material3.Tab
 import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
 
-private val TABS = listOf("Browse", "Downloads", "Torrents")
-
 @Composable
 fun HomeScreen(factory: ArcTvViewModelFactory) {
     val updateViewModel: UpdateViewModel = viewModel(factory = factory)
     val browseViewModel: BrowseViewModel = viewModel(factory = factory)
     val downloadsViewModel: DownloadsViewModel = viewModel(factory = factory)
     val torrentsViewModel: TorrentsViewModel = viewModel(factory = factory)
+    val liveViewModel: LiveViewModel = viewModel(factory = factory)
+    val settingsViewModel: SettingsViewModel = viewModel(factory = factory)
 
     val updateState by updateViewModel.state.collectAsState()
+    val settingsState by settingsViewModel.state.collectAsState()
+    // Downloads/Torrents browse the Real-Debrid account, so they only appear
+    // when Real-Debrid is connected (AllDebrid-only setups hide them).
+    val tabs = if (settingsState.rdConnected) {
+        listOf("Browse", "Live", "Downloads", "Torrents", "Settings")
+    } else {
+        listOf("Browse", "Live", "Settings")
+    }
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    if (selectedTab >= tabs.size) selectedTab = tabs.size - 1
 
     Column(Modifier.fillMaxSize()) {
         UpdateBanner(updateViewModel)
@@ -49,7 +58,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
             contentAlignment = Alignment.Center,
         ) {
             TabRow(selectedTabIndex = selectedTab, modifier = Modifier.align(Alignment.Center)) {
-                TABS.forEachIndexed { index, title ->
+                tabs.forEachIndexed { index, title ->
                     key(index) {
                         Tab(
                             selected = index == selectedTab,
@@ -93,10 +102,12 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
             }
         }
 
-        when (selectedTab) {
-            0 -> BrowseScreen(browseViewModel)
-            1 -> DownloadsScreen(downloadsViewModel)
-            2 -> TorrentsScreen(torrentsViewModel)
+        when (tabs[selectedTab]) {
+            "Browse" -> BrowseScreen(browseViewModel)
+            "Live" -> LiveScreen(liveViewModel)
+            "Downloads" -> DownloadsScreen(downloadsViewModel)
+            "Torrents" -> TorrentsScreen(torrentsViewModel)
+            "Settings" -> SettingsScreen(settingsViewModel)
         }
     }
 }

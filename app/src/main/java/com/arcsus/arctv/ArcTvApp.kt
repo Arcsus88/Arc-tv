@@ -1,10 +1,13 @@
 package com.arcsus.arctv
 
 import android.app.Application
+import com.arcsus.arctv.data.AllDebridRepository
 import com.arcsus.arctv.data.ArtworkRepository
 import com.arcsus.arctv.data.BrowseRepository
+import com.arcsus.arctv.data.LiveRepository
 import com.arcsus.arctv.data.RdClient
 import com.arcsus.arctv.data.RdRepository
+import com.arcsus.arctv.data.SettingsStore
 import com.arcsus.arctv.data.TokenStore
 
 class ArcTvApp : Application() {
@@ -19,6 +22,12 @@ class ArcTvApp : Application() {
         private set
     lateinit var browseRepository: BrowseRepository
         private set
+    lateinit var settingsStore: SettingsStore
+        private set
+    lateinit var allDebridRepository: AllDebridRepository
+        private set
+    lateinit var liveRepository: LiveRepository
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -26,6 +35,9 @@ class ArcTvApp : Application() {
         rdClient = RdClient(tokenStore)
         repository = RdRepository(rdClient, tokenStore)
         artworkRepository = ArtworkRepository(this)
-        browseRepository = BrowseRepository(tokenStore)
+        settingsStore = SettingsStore(this)
+        allDebridRepository = AllDebridRepository(tokenStore)
+        liveRepository = LiveRepository()
+        browseRepository = BrowseRepository(tokenStore, settingsStore, allDebridRepository)
     }
 }

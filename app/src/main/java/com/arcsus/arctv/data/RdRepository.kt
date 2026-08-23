@@ -47,7 +47,7 @@ class RdRepository(
         throw AuthExpiredException()
     }
 
-    suspend fun signOut() = tokenStore.clear()
+    suspend fun signOut() = tokenStore.clearRd()
 
     // ---- Downloads ----
 

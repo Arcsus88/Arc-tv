@@ -8,10 +8,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -36,8 +38,38 @@ fun AuthScreen(viewModel: AuthViewModel) {
         contentAlignment = Alignment.Center,
     ) {
         when (val s = state) {
-            AuthViewModel.State.Loading -> {
-                Text("Contacting Real-Debrid…", style = MaterialTheme.typography.titleLarge)
+            AuthViewModel.State.Choose -> {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(48.dp),
+                ) {
+                    Text(
+                        "Sign in",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Connect a debrid account to start streaming.",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(32.dp))
+                    Row {
+                        Button(onClick = { viewModel.start(DebridProvider.REAL_DEBRID) }) {
+                            Text("Real-Debrid")
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Button(onClick = { viewModel.start(DebridProvider.ALL_DEBRID) }) {
+                            Text("AllDebrid")
+                        }
+                    }
+                }
+            }
+
+            is AuthViewModel.State.Loading -> {
+                Text("Contacting ${s.provider.label}…", style = MaterialTheme.typography.titleLarge)
             }
 
             is AuthViewModel.State.CodeReady -> {
@@ -47,7 +79,7 @@ fun AuthScreen(viewModel: AuthViewModel) {
                     modifier = Modifier.padding(48.dp),
                 ) {
                     Text(
-                        "Sign in to Real-Debrid",
+                        "Sign in to ${s.provider.label}",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                     )
@@ -92,6 +124,10 @@ fun AuthScreen(viewModel: AuthViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.graphicsLayer { this.alpha = alpha },
                     )
+                    Spacer(Modifier.height(24.dp))
+                    Button(onClick = { viewModel.choose() }) {
+                        Text("Back")
+                    }
                 }
             }
 
@@ -106,8 +142,14 @@ fun AuthScreen(viewModel: AuthViewModel) {
                         textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.height(24.dp))
-                    Button(onClick = { viewModel.start() }) {
-                        Text("Try again")
+                    Row {
+                        Button(onClick = { viewModel.start(s.provider) }) {
+                            Text("Try again")
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Button(onClick = { viewModel.choose() }) {
+                            Text("Back")
+                        }
                     }
                 }
             }
