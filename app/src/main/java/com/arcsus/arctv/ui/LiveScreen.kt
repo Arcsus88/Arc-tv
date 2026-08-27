@@ -160,6 +160,7 @@ fun LiveScreen(viewModel: LiveViewModel) {
 
 @Composable
 private fun ChannelGrid(channels: List<LiveChannel>, onPlay: (LiveChannel) -> Unit) {
+    var visible by rememberSaveable(channels.size) { mutableStateOf(MAX_RENDERED) }
     if (channels.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
@@ -176,7 +177,7 @@ private fun ChannelGrid(channels: List<LiveChannel>, onPlay: (LiveChannel) -> Un
         verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        items(channels.take(MAX_RENDERED), key = { it.id }) { channel ->
+        items(channels.take(visible), key = { it.id }) { channel ->
             Card(onClick = { onPlay(channel) }) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -199,14 +200,10 @@ private fun ChannelGrid(channels: List<LiveChannel>, onPlay: (LiveChannel) -> Un
                 }
             }
         }
-        if (channels.size > MAX_RENDERED) {
+        if (channels.size > visible) {
             item {
-                Box(Modifier.padding(16.dp)) {
-                    Text(
-                        "Showing the first $MAX_RENDERED — search to narrow down.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                Button(onClick = { visible += MAX_RENDERED }, modifier = Modifier.padding(8.dp)) {
+                    Text("Show more (${channels.size - visible} left)")
                 }
             }
         }

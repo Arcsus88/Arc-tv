@@ -49,7 +49,7 @@ class LiveRepository {
     suspend fun channels(playlist: SavedPlaylist, refresh: Boolean = false): List<LiveChannel> {
         if (!refresh) cache[playlist.key]?.let { return it }
         val loaded = withContext(Dispatchers.IO) {
-            if (playlist.isXtream) loadXtream(playlist) else loadM3u(playlist.url)
+            withDerivedGroups(if (playlist.isXtream) loadXtream(playlist) else loadM3u(playlist.url))
         }
         if (loaded.isEmpty()) throw LiveException("The playlist contains no channels.")
         cache[playlist.key] = loaded
@@ -186,4 +186,27 @@ class LiveRepository {
     }
 
     private fun encode(value: String): String = java.net.URLEncoder.encode(value, "UTF-8")
+
+    // "UK: BBC One", "[UK] BBC One", "UK | BBC One", "UK - BBC One" -> "UK".
+    private val namePrefix = Regex("^\\s*\\[?([A-Za-z]{2,3})]?\\s*[:|\\-\u2013]\\s*\\S")
+
+    /**
+     * Derive groups for ungrouped channels from "UK: BBC One"-style name
+     * prefixes. Flat playlists often carry the country only in the channel
+     * name, which buries everything in one giant "Ungrouped" bucket. A prefix
+     * only becomes a group when several channels share it.
+     */
+    private fun withDerivedGroups(channels: List<LiveChannel>): List<LiveChannel> {
+        fun prefixOf(c: LiveChannel): String? {
+            if (c.group.isNotEmpty()) return null
+            return namePrefix.find(c.name)?.groupValues?.get(1)?.uppercase()
+        }
+        val counts = mutableMapOf<String, Int>()
+        for (c in channels) prefixOf(c)?.let { counts[it] = (counts[it] ?: 0) + 1 }
+        if (counts.none { it.value >= 3 }) return channels
+        return channels.map { c ->
+            val p = prefixOf(c)
+            if (p != null && (counts[p] ?: 0) >= 3) c.copy(group = p) else c
+        }
+    }
 }
