@@ -27,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -240,8 +242,13 @@ private fun AddPlaylistForm(onAdd: (SavedPlaylist) -> Unit) {
 }
 
 /**
- * A TV-friendly text field: D-pad focus shows it as a button-like surface;
- * pressing OK activates editing with the on-screen keyboard, and Done commits.
+ * A TV-friendly text field, built exactly like TvSearchField: D-pad focus
+ * lands on a button-like surface without opening the keyboard; pressing OK
+ * activates editing, requests focus on the text field and shows the
+ * keyboard, and Done (or focusing away) commits. The active branch uses a
+ * NON-clickable surface and grabs focus immediately — otherwise focus falls
+ * back to the tab row, whose tabs switch on focus and yank the user to
+ * Browse mid-edit.
  */
 @Composable
 private fun TvTextField(
@@ -250,39 +257,72 @@ private fun TvTextField(
     onCommit: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var editing by rememberSaveable { mutableStateOf(false) }
-    var draft by rememberSaveable(value) { mutableStateOf(value) }
+    var active by remember { mutableStateOf(false) }
+    var draft by remember { mutableStateOf(value) }
+    // After Done collapses the field, put D-pad focus back on it — otherwise
+    // focus falls to the tab row and yanks the user to the Browse tab.
+    var reclaimFocus by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    // Reset each time we (re)enter the active state; guards against the field
+    // collapsing on the initial onFocusChanged(false) before requestFocus runs.
+    var everFocused by remember(active) { mutableStateOf(false) }
 
-    if (editing) {
-        val focusRequester = remember { FocusRequester() }
-        LaunchedEffect(Unit) { focusRequester.requestFocus() }
-        Surface(
-            onClick = {},
-            shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-            modifier = modifier,
-        ) {
-            BasicTextField(
-                value = draft,
-                onValueChange = { draft = it },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-                cursorBrush = SolidColor(ArcBlue),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = {
-                    editing = false
-                    onCommit(draft.trim())
-                }),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 12.dp)
-                    .focusRequester(focusRequester),
-            )
+    if (active) {
+        LaunchedEffect(Unit) {
+            draft = value
+            focusRequester.requestFocus()
+            keyboard?.show()
+        }
+        Surface(shape = RoundedCornerShape(8.dp), modifier = modifier) {
+            Box(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                if (draft.isEmpty()) {
+                    Text(
+                        placeholder,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                BasicTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(ArcBlue),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        onCommit(draft.trim())
+                        active = false
+                        reclaimFocus = true
+                        keyboard?.hide()
+                    }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                        .onFocusChanged {
+                            if (it.isFocused) everFocused = true
+                            // Only collapse once it has actually held focus, so
+                            // activating it doesn't instantly close. Committing
+                            // here keeps typed text when navigating away.
+                            else if (everFocused) {
+                                onCommit(draft.trim())
+                                active = false
+                            }
+                        },
+                )
+            }
         }
     } else {
+        if (reclaimFocus) {
+            LaunchedEffect(Unit) {
+                focusRequester.requestFocus()
+                reclaimFocus = false
+            }
+        }
         Surface(
-            onClick = { editing = true },
+            onClick = { active = true },
             shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-            modifier = modifier,
+            modifier = modifier.focusRequester(focusRequester),
         ) {
             Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
                 Text(
