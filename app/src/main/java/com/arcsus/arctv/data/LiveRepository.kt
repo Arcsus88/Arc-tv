@@ -49,11 +49,46 @@ class LiveRepository {
     suspend fun channels(playlist: SavedPlaylist, refresh: Boolean = false): List<LiveChannel> {
         if (!refresh) cache[playlist.key]?.let { return it }
         val loaded = withContext(Dispatchers.IO) {
-            withDerivedGroups(if (playlist.isXtream) loadXtream(playlist) else loadM3u(playlist.url))
+            withDerivedGroups(load(playlist))
         }
         if (loaded.isEmpty()) throw LiveException("The playlist contains no channels.")
         cache[playlist.key] = loaded
         return loaded
+    }
+
+    private fun load(playlist: SavedPlaylist): List<LiveChannel> {
+        if (playlist.isXtream) return loadXtream(playlist)
+        // An Xtream get.php M3U export carries the panel login in the URL.
+        // Downloading the file is slow and often times out; the same
+        // credentials via player_api.php load in seconds.
+        val asXtream = xtreamLoginFromM3uUrl(playlist.url)
+        if (asXtream != null) {
+            try {
+                return loadXtream(asXtream)
+            } catch (e: Exception) {
+                // Panel without player_api: fall back to the raw file.
+            }
+        }
+        return loadM3u(playlist.url)
+    }
+
+    private fun xtreamLoginFromM3uUrl(url: String): SavedPlaylist? {
+        val parsed = runCatching { java.net.URI(url) }.getOrNull() ?: return null
+        if (parsed.path?.lowercase()?.endsWith("/get.php") != true) return null
+        val params = (parsed.rawQuery ?: return null).split("&").mapNotNull { part ->
+            val eq = part.indexOf('=')
+            if (eq <= 0) null else part.substring(0, eq) to java.net.URLDecoder.decode(part.substring(eq + 1), "UTF-8")
+        }.toMap()
+        val username = params["username"] ?: return null
+        val password = params["password"] ?: return null
+        val port = if (parsed.port != -1) ":${parsed.port}" else ""
+        return SavedPlaylist(
+            name = parsed.host ?: "Playlist",
+            url = "${parsed.scheme}://${parsed.host}$port",
+            kind = "xtream",
+            username = username,
+            password = password,
+        )
     }
 
     // ---- M3U ----
