@@ -32,8 +32,8 @@ android {
         applicationId = "com.arcsus.arctv"
         minSdk = 23
         targetSdk = 36
-        versionCode = 25
-        versionName = "1.8.2"
+        versionCode = 26
+        versionName = "1.8.3"
     }
 
     signingConfigs {

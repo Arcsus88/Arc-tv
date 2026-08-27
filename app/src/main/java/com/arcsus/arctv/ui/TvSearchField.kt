@@ -1,5 +1,6 @@
 package com.arcsus.arctv.ui
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,33 +15,128 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.arcsus.arctv.ui.theme.ArcBlue
 
 /**
- * A TV-friendly search box. Focusing it with the D-pad does NOT pop the
- * on-screen keyboard — the keyboard only appears once you press OK/Select to
- * activate it. Pressing Search on the keyboard (or navigating away) closes it.
+ * TV-friendly editable field. The BasicTextField stays mounted permanently and
+ * flips readOnly instead of being swapped in and out — replacing the focused
+ * node hands D-pad focus back to the tab row, whose tabs switch on focus and
+ * yank the user to the Browse tab mid-edit. D-pad focus lands on the field
+ * without opening the keyboard (a readOnly field doesn't summon the IME);
+ * pressing OK unlocks it and shows the keyboard; Done/Search or focusing away
+ * locks it again.
  */
+@Composable
+fun TvEditField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+    leadingIcon: (@Composable () -> Unit)? = null,
+    shape: Shape = RoundedCornerShape(8.dp),
+    imeAction: ImeAction = ImeAction.Done,
+    onImeAction: () -> Unit = {},
+    /** Called when editing ends for any reason (Done, Search, or focus loss). */
+    onDeactivate: () -> Unit = {},
+) {
+    var active by remember { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    fun deactivate() {
+        if (!active) return
+        active = false
+        keyboard?.hide()
+        onDeactivate()
+    }
+
+    val borderColor = when {
+        active -> ArcBlue
+        focused -> MaterialTheme.colorScheme.onSurface
+        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .border(2.dp, borderColor, shape)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        if (leadingIcon != null) {
+            leadingIcon()
+            Spacer(Modifier.width(10.dp))
+        }
+        Box(Modifier.weight(1f)) {
+            if (value.isEmpty()) {
+                Text(
+                    placeholder,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                readOnly = !active,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(ArcBlue),
+                keyboardOptions = KeyboardOptions(imeAction = imeAction),
+                keyboardActions = KeyboardActions(
+                    onDone = { onImeAction(); deactivate() },
+                    onSearch = { onImeAction(); deactivate() },
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { state ->
+                        focused = state.isFocused
+                        if (!state.isFocused) deactivate()
+                    }
+                    .onPreviewKeyEvent { event ->
+                        val isSelect = event.key == Key.DirectionCenter ||
+                            event.key == Key.Enter ||
+                            event.key == Key.NumPadEnter
+                        if (!active && isSelect) {
+                            // Activate on KeyUp so the press that opened editing
+                            // can't leak into the now-editable field as an Enter.
+                            if (event.type == KeyEventType.KeyUp) {
+                                active = true
+                                keyboard?.show()
+                            }
+                            true
+                        } else {
+                            false
+                        }
+                    },
+            )
+        }
+    }
+}
+
+/** The search box used across the app — a [TvEditField] with a search icon. */
 @Composable
 fun TvSearchField(
     query: String,
@@ -49,76 +145,21 @@ fun TvSearchField(
     modifier: Modifier = Modifier,
     placeholder: String = "Search…",
 ) {
-    var active by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
-    val keyboard = LocalSoftwareKeyboardController.current
-    // Reset each time we (re)enter the active state; guards against the field
-    // collapsing on the initial onFocusChanged(false) before requestFocus runs.
-    var everFocused by remember(active) { mutableStateOf(false) }
-
-    if (active) {
-        LaunchedEffect(Unit) {
-            focusRequester.requestFocus()
-            keyboard?.show()
-        }
-        Surface(shape = RoundedCornerShape(24.dp), modifier = modifier) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            ) {
-                Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(10.dp))
-                Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) {
-                        Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    BasicTextField(
-                        value = query,
-                        onValueChange = onQueryChange,
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-                        cursorBrush = SolidColor(ArcBlue),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {
-                            onSearch()
-                            active = false
-                            keyboard?.hide()
-                        }),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(focusRequester)
-                            .onFocusChanged {
-                                if (it.isFocused) everFocused = true
-                                // Only collapse once it has actually held focus,
-                                // so activating it doesn't instantly close.
-                                else if (everFocused) active = false
-                            },
-                    )
-                }
-            }
-        }
-    } else {
-        // Inactive: a focusable button. Focus lands here without opening the keyboard.
-        Surface(
-            onClick = { active = true },
-            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(24.dp)),
-            modifier = modifier,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            ) {
-                Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    query.ifEmpty { placeholder },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (query.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-    }
+    TvEditField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = modifier,
+        placeholder = placeholder,
+        leadingIcon = {
+            Icon(
+                Icons.Default.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        },
+        shape = RoundedCornerShape(24.dp),
+        imeAction = ImeAction.Search,
+        onImeAction = onSearch,
+    )
 }

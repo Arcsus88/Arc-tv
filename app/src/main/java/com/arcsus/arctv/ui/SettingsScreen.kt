@@ -105,10 +105,13 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
             Column {
                 Text("TorBox API token (optional)", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(6.dp))
-                TvTextField(
-                    value = state.torboxToken,
+                var torboxDraft by remember { mutableStateOf(state.torboxToken) }
+                LaunchedEffect(state.torboxToken) { torboxDraft = state.torboxToken }
+                TvEditField(
+                    value = torboxDraft,
+                    onValueChange = { torboxDraft = it },
                     placeholder = "From torbox.app settings — tried first for playback",
-                    onCommit = { viewModel.saveTorboxToken(it) },
+                    onDeactivate = { viewModel.saveTorboxToken(torboxDraft) },
                     modifier = Modifier.fillMaxWidth(0.6f),
                 )
             }
@@ -190,29 +193,29 @@ private fun AddPlaylistForm(onAdd: (SavedPlaylist) -> Unit) {
                 Text(if (kind == "xtream") "• Xtream login" else "Xtream login")
             }
         }
-        TvTextField(
+        TvEditField(
             value = name,
+            onValueChange = { name = it },
             placeholder = "Name (optional)",
-            onCommit = { name = it },
             modifier = Modifier.fillMaxWidth(0.4f),
         )
-        TvTextField(
+        TvEditField(
             value = url,
+            onValueChange = { url = it },
             placeholder = if (kind == "xtream") "http://panel.example.com:8080" else "https://example.com/playlist.m3u",
-            onCommit = { url = it },
             modifier = Modifier.fillMaxWidth(0.6f),
         )
         if (kind == "xtream") {
-            TvTextField(
+            TvEditField(
                 value = username,
+                onValueChange = { username = it },
                 placeholder = "Username",
-                onCommit = { username = it },
                 modifier = Modifier.fillMaxWidth(0.4f),
             )
-            TvTextField(
+            TvEditField(
                 value = password,
+                onValueChange = { password = it },
                 placeholder = "Password",
-                onCommit = { password = it },
                 modifier = Modifier.fillMaxWidth(0.4f),
             )
         }
@@ -237,103 +240,6 @@ private fun AddPlaylistForm(onAdd: (SavedPlaylist) -> Unit) {
             enabled = ready,
         ) {
             Text("Add playlist")
-        }
-    }
-}
-
-/**
- * A TV-friendly text field, built exactly like TvSearchField: D-pad focus
- * lands on a button-like surface without opening the keyboard; pressing OK
- * activates editing, requests focus on the text field and shows the
- * keyboard, and Done (or focusing away) commits. The active branch uses a
- * NON-clickable surface and grabs focus immediately — otherwise focus falls
- * back to the tab row, whose tabs switch on focus and yank the user to
- * Browse mid-edit.
- */
-@Composable
-private fun TvTextField(
-    value: String,
-    placeholder: String,
-    onCommit: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var active by remember { mutableStateOf(false) }
-    var draft by remember { mutableStateOf(value) }
-    // After Done collapses the field, put D-pad focus back on it — otherwise
-    // focus falls to the tab row and yanks the user to the Browse tab.
-    var reclaimFocus by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
-    val keyboard = LocalSoftwareKeyboardController.current
-    // Reset each time we (re)enter the active state; guards against the field
-    // collapsing on the initial onFocusChanged(false) before requestFocus runs.
-    var everFocused by remember(active) { mutableStateOf(false) }
-
-    if (active) {
-        LaunchedEffect(Unit) {
-            draft = value
-            focusRequester.requestFocus()
-            keyboard?.show()
-        }
-        Surface(shape = RoundedCornerShape(8.dp), modifier = modifier) {
-            Box(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-                if (draft.isEmpty()) {
-                    Text(
-                        placeholder,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                BasicTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-                    cursorBrush = SolidColor(ArcBlue),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = {
-                        onCommit(draft.trim())
-                        active = false
-                        reclaimFocus = true
-                        keyboard?.hide()
-                    }),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester)
-                        .onFocusChanged {
-                            if (it.isFocused) everFocused = true
-                            // Only collapse once it has actually held focus, so
-                            // activating it doesn't instantly close. Committing
-                            // here keeps typed text when navigating away.
-                            else if (everFocused) {
-                                onCommit(draft.trim())
-                                active = false
-                            }
-                        },
-                )
-            }
-        }
-    } else {
-        if (reclaimFocus) {
-            LaunchedEffect(Unit) {
-                focusRequester.requestFocus()
-                reclaimFocus = false
-            }
-        }
-        Surface(
-            onClick = { active = true },
-            shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-            modifier = modifier.focusRequester(focusRequester),
-        ) {
-            Box(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
-                Text(
-                    value.ifBlank { placeholder },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (value.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant
-                    else MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
         }
     }
 }
