@@ -39,6 +39,8 @@ class SettingsStore(context: Context) {
         val TORBOX_TOKEN = stringPreferencesKey("torbox_token")
         val PLAYLISTS = stringPreferencesKey("live_playlists")
         val ACTIVE_PLAYLIST = stringPreferencesKey("active_playlist_key")
+        val GUIDE_GROUPS = stringPreferencesKey("guide_groups")
+        val GUIDE_ACTIVE_GROUP = stringPreferencesKey("guide_active_group")
     }
 
     val torboxToken: Flow<String> = dataStore.data.map { it[Keys.TORBOX_TOKEN].orEmpty() }
@@ -75,6 +77,23 @@ class SettingsStore(context: Context) {
 
     suspend fun saveActivePlaylistKey(key: String) {
         dataStore.edit { it[Keys.ACTIVE_PLAYLIST] = key }
+    }
+
+    /** Channel groups the user picked for the TV guide. */
+    val guideGroups: Flow<List<String>> = dataStore.data.map { prefs ->
+        val raw = prefs[Keys.GUIDE_GROUPS]
+        if (raw.isNullOrBlank()) emptyList()
+        else runCatching { json.decodeFromString<List<String>>(raw) }.getOrDefault(emptyList())
+    }
+
+    suspend fun saveGuideGroups(groups: List<String>) {
+        dataStore.edit { it[Keys.GUIDE_GROUPS] = json.encodeToString(groups) }
+    }
+
+    val activeGuideGroup: Flow<String?> = dataStore.data.map { it[Keys.GUIDE_ACTIVE_GROUP] }
+
+    suspend fun saveActiveGuideGroup(group: String) {
+        dataStore.edit { it[Keys.GUIDE_ACTIVE_GROUP] = group }
     }
 
     private fun decodePlaylists(raw: String?): List<SavedPlaylist> {

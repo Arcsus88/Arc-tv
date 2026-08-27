@@ -36,6 +36,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
     val downloadsViewModel: DownloadsViewModel = viewModel(factory = factory)
     val torrentsViewModel: TorrentsViewModel = viewModel(factory = factory)
     val liveViewModel: LiveViewModel = viewModel(factory = factory)
+    val guideViewModel: GuideViewModel = viewModel(factory = factory)
     val settingsViewModel: SettingsViewModel = viewModel(factory = factory)
 
     val updateState by updateViewModel.state.collectAsState()
@@ -43,9 +44,9 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
     // Downloads/Torrents browse the Real-Debrid account, so they only appear
     // when Real-Debrid is connected (AllDebrid-only setups hide them).
     val tabs = if (settingsState.rdConnected) {
-        listOf("Browse", "Live", "Downloads", "Torrents", "Settings")
+        listOf("Browse", "Live", "Guide", "Downloads", "Torrents", "Settings")
     } else {
-        listOf("Browse", "Live", "Settings")
+        listOf("Browse", "Live", "Guide", "Settings")
     }
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     if (selectedTab >= tabs.size) selectedTab = tabs.size - 1
@@ -105,6 +106,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         when (tabs[selectedTab]) {
             "Browse" -> BrowseScreen(browseViewModel)
             "Live" -> LiveScreen(liveViewModel)
+            "Guide" -> GuideScreen(guideViewModel)
             "Downloads" -> DownloadsScreen(downloadsViewModel)
             "Torrents" -> TorrentsScreen(torrentsViewModel)
             "Settings" -> SettingsScreen(settingsViewModel)

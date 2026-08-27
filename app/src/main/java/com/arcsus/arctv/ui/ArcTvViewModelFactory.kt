@@ -15,6 +15,9 @@ class ArcTvViewModelFactory(private val app: ArcTvApp) : ViewModelProvider.Facto
         modelClass.isAssignableFrom(LiveViewModel::class.java) ->
             LiveViewModel(app.liveRepository, app.settingsStore) as T
 
+        modelClass.isAssignableFrom(GuideViewModel::class.java) ->
+            GuideViewModel(app.liveRepository, app.settingsStore) as T
+
         modelClass.isAssignableFrom(SettingsViewModel::class.java) ->
             SettingsViewModel(app.repository, app.allDebridRepository, app.tokenStore, app.settingsStore) as T
 

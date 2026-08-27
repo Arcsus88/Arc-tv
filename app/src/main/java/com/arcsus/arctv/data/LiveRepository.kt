@@ -1,6 +1,11 @@
 package com.arcsus.arctv.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -22,6 +27,14 @@ data class LiveChannel(
     val url: String,
 )
 
+/** One programme in a channel's guide. Times are unix seconds. */
+data class EpgEntry(
+    val title: String,
+    val description: String,
+    val start: Long,
+    val stop: Long,
+)
+
 /**
  * Loads Live TV channel lists. Two playlist kinds:
  *  - M3U: download and stream-parse the playlist file (Xtream get.php exports
@@ -35,6 +48,8 @@ class LiveRepository {
         private const val MAX_CHANNELS = 25_000
         /** Many IPTV panels reject unknown clients; a player UA keeps them happy. */
         private const val PLAYER_USER_AGENT = "VLC/3.0.20 LibVLC/3.0.20"
+        private const val EPG_TTL_MS = 5 * 60 * 1000L
+        private val STREAM_ID = Regex("/live/[^/]+/[^/]+/(\\d+)\\.(?:m3u8|ts)(?:[?#]|$)", RegexOption.IGNORE_CASE)
     }
 
     private val client = OkHttpClient.Builder()
@@ -45,6 +60,85 @@ class LiveRepository {
 
     // Session-lived cache so switching tabs never re-downloads a big playlist.
     private val cache = mutableMapOf<String, List<LiveChannel>>()
+
+    // Guide listings cache: refetch after five minutes.
+    private val epgCache = mutableMapOf<String, Pair<Long, Map<String, List<EpgEntry>>>>()
+
+    /** Whether a playlist can serve guide data (Xtream login, direct or via get.php). */
+    fun supportsEpg(playlist: SavedPlaylist): Boolean =
+        playlist.isXtream || xtreamLoginFromM3uUrl(playlist.url) != null
+
+    /**
+     * Now/next listings for the given channels from the playlist's Xtream
+     * panel, keyed by channel URL. Channels without a recognisable stream id
+     * simply get no listings.
+     */
+    suspend fun epg(playlist: SavedPlaylist, channels: List<LiveChannel>): Map<String, List<EpgEntry>> =
+        withContext(Dispatchers.IO) {
+            val login = if (playlist.isXtream) playlist else xtreamLoginFromM3uUrl(playlist.url)
+                ?: return@withContext emptyMap()
+            val byId = LinkedHashMap<Long, String>()
+            for (c in channels) {
+                val id = STREAM_ID.find(c.url)?.groupValues?.get(1)?.toLongOrNull() ?: continue
+                if (!byId.containsKey(id)) byId[id] = c.url
+                if (byId.size >= 60) break
+            }
+            if (byId.isEmpty()) return@withContext emptyMap()
+
+            val cacheKey = "${login.key}:${byId.keys.joinToString(",")}"
+            epgCache[cacheKey]?.let { (at, data) ->
+                if (System.currentTimeMillis() - at < EPG_TTL_MS) return@withContext data
+            }
+
+            val base = login.url.trimEnd('/')
+            val sem = Semaphore(8)
+            val fetched = coroutineScope {
+                byId.keys.map { id ->
+                    async {
+                        sem.withPermit { id to fetchShortEpg(base, login.username, login.password, id) }
+                    }
+                }.awaitAll()
+            }
+            val result = buildMap {
+                for ((id, listings) in fetched) {
+                    val url = byId[id] ?: continue
+                    put(url, listings)
+                }
+            }
+            epgCache[cacheKey] = System.currentTimeMillis() to result
+            result
+        }
+
+    private fun fetchShortEpg(base: String, user: String, pass: String, id: Long): List<EpgEntry> {
+        return try {
+            val url = "$base/player_api.php?username=${encode(user)}&password=${encode(pass)}&action=get_short_epg&stream_id=$id&limit=4"
+            val body = fetchJson(url) as? JsonObject ?: return emptyList()
+            val listings = body["epg_listings"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()
+            listings.mapNotNull { e ->
+                val o = e as? JsonObject ?: return@mapNotNull null
+                val title = decodeBase64(o["title"]?.jsonPrimitive?.content)
+                val stop = o["stop_timestamp"]?.jsonPrimitive?.content?.toLongOrNull() ?: 0L
+                if (title.isBlank() || stop <= 0L) return@mapNotNull null
+                EpgEntry(
+                    title = title,
+                    description = decodeBase64(o["description"]?.jsonPrimitive?.content),
+                    start = o["start_timestamp"]?.jsonPrimitive?.content?.toLongOrNull() ?: 0L,
+                    stop = stop,
+                )
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun decodeBase64(value: String?): String {
+        if (value.isNullOrBlank()) return ""
+        return try {
+            String(android.util.Base64.decode(value, android.util.Base64.DEFAULT), Charsets.UTF_8).trim()
+        } catch (e: IllegalArgumentException) {
+            value
+        }
+    }
 
     suspend fun channels(playlist: SavedPlaylist, refresh: Boolean = false): List<LiveChannel> {
         if (!refresh) cache[playlist.key]?.let { return it }
@@ -72,7 +166,7 @@ class LiveRepository {
         return loadM3u(playlist.url)
     }
 
-    private fun xtreamLoginFromM3uUrl(url: String): SavedPlaylist? {
+    internal fun xtreamLoginFromM3uUrl(url: String): SavedPlaylist? {
         val parsed = runCatching { java.net.URI(url) }.getOrNull() ?: return null
         if (parsed.path?.lowercase()?.endsWith("/get.php") != true) return null
         val params = (parsed.rawQuery ?: return null).split("&").mapNotNull { part ->
