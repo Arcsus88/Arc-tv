@@ -52,7 +52,7 @@ class UpdateViewModel(private val checker: UpdateChecker) : ViewModel() {
                 _state.update {
                     it.copy(
                         checking = false,
-                        error = if (manual) "Couldn't check for updates. Try again." else null,
+                        error = if (manual) "Couldn't check for updates (${e.message ?: "network error"}). Try again." else null,
                     )
                 }
             }

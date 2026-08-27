@@ -48,7 +48,9 @@ class UpdateChecker(private val context: Context) {
             .header("Accept", "application/vnd.github+json")
             .build()
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return@withContext null
+            // Don't swallow failures as "no update" — GitHub rate-limits
+            // anonymous API calls per IP, and that must not read as up-to-date.
+            if (!response.isSuccessful) throw IOException("GitHub answered HTTP ${response.code}")
             val release = json.decodeFromString<GithubRelease>(response.body!!.string())
             if (release.draft || release.prerelease) return@withContext null
             val remoteVersion = release.tagName.removePrefix("v")
