@@ -154,13 +154,22 @@ fun GuideScreen(viewModel: GuideViewModel) {
                         )
                         Spacer(Modifier.height(8.dp))
                     }
-                    GuideList(
-                        channels = state.channels.filter { it.group == current },
-                        epg = state.epg,
-                        epgLoading = state.epgLoading,
-                        nowMs = state.nowMs,
-                        onPlay = play,
-                    )
+                    val groupChannels = state.channels.filter { it.group == current }
+                    if (groupChannels.isEmpty()) {
+                        Text(
+                            if (state.epgLoading) "Loading channels…" else "No channels in this group.",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        GuideList(
+                            channels = groupChannels,
+                            epg = state.epg,
+                            epgLoading = state.epgLoading,
+                            nowMs = state.nowMs,
+                            onPlay = play,
+                        )
+                    }
                 }
             }
         }
@@ -215,7 +224,7 @@ private fun GroupPicker(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                "${group.count} channels",
+                                if (group.count > 0) "${group.count} channels" else "loads when picked",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

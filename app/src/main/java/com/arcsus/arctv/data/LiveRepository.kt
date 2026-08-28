@@ -61,6 +61,73 @@ class LiveRepository {
     // Session-lived cache so switching tabs never re-downloads a big playlist.
     private val cache = mutableMapOf<String, List<LiveChannel>>()
 
+    data class XtreamCategory(val id: String, val name: String)
+
+    private val categoryCache = mutableMapOf<String, List<XtreamCategory>>()
+
+    private fun xtreamLogin(playlist: SavedPlaylist): SavedPlaylist? =
+        if (playlist.isXtream) playlist else xtreamLoginFromM3uUrl(playlist.url)
+
+    /**
+     * Every live category the panel offers, straight from get_live_categories.
+     * The channel list itself is capped at [MAX_CHANNELS], so on huge panels
+     * groups past the cap would otherwise be invisible — this list is always
+     * complete. Empty for plain M3U playlists.
+     */
+    suspend fun panelGroups(playlist: SavedPlaylist): List<String> = withContext(Dispatchers.IO) {
+        val login = xtreamLogin(playlist) ?: return@withContext emptyList()
+        categories(login).map { it.name }
+    }
+
+    private fun categories(login: SavedPlaylist): List<XtreamCategory> {
+        categoryCache[login.key]?.let { return it }
+        val base = login.url.trimEnd('/')
+        val url = "$base/player_api.php?username=${encode(login.username)}&password=${encode(login.password)}&action=get_live_categories"
+        val cats = runCatching { fetchJson(url) as? JsonArray }.getOrNull() ?: return emptyList()
+        val list = cats.mapNotNull { c ->
+            val o = c as? JsonObject ?: return@mapNotNull null
+            val id = o["category_id"]?.jsonPrimitive?.content ?: return@mapNotNull null
+            XtreamCategory(id, o["category_name"]?.jsonPrimitive?.content.orEmpty())
+        }
+        categoryCache[login.key] = list
+        return list
+    }
+
+    /**
+     * Channels of one category, fetched on demand — the escape hatch for
+     * groups the capped full load missed. Merged into the playlist's cached
+     * channel list so the Live tab sees them too.
+     */
+    suspend fun channelsForGroup(playlist: SavedPlaylist, group: String): List<LiveChannel> =
+        withContext(Dispatchers.IO) {
+            val login = xtreamLogin(playlist) ?: return@withContext emptyList()
+            val cat = categories(login).firstOrNull { it.name == group }
+                ?: return@withContext emptyList()
+            val base = login.url.trimEnd('/')
+            val url = "$base/player_api.php?username=${encode(login.username)}&password=${encode(login.password)}&action=get_live_streams&category_id=${encode(cat.id)}"
+            val streams = fetchJson(url) as? JsonArray ?: return@withContext emptyList()
+            val result = mutableListOf<LiveChannel>()
+            for ((index, s) in streams.withIndex()) {
+                val o = s as? JsonObject ?: continue
+                val streamId = o["stream_id"]?.jsonPrimitive?.content ?: continue
+                val streamUrl = "$base/live/${encode(login.username)}/${encode(login.password)}/$streamId.m3u8"
+                result.add(
+                    LiveChannel(
+                        id = "cat${cat.id}:$index:$streamUrl",
+                        name = o["name"]?.jsonPrimitive?.content ?: "Channel $streamId",
+                        logo = o["stream_icon"]?.jsonPrimitive?.content.orEmpty(),
+                        group = group,
+                        url = streamUrl,
+                    )
+                )
+            }
+            cache[playlist.key]?.let { existing ->
+                val known = existing.mapTo(HashSet()) { it.url }
+                cache[playlist.key] = existing + result.filter { it.url !in known }
+            }
+            result
+        }
+
     // Guide listings cache: refetch after five minutes.
     private val epgCache = mutableMapOf<String, Pair<Long, Map<String, List<EpgEntry>>>>()
 

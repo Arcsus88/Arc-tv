@@ -50,7 +50,7 @@ class GuideViewModel(
         viewModelScope.launch {
             settingsStore.activeGuideGroup.collect { group ->
                 _state.value = _state.value.copy(activeGroup = group)
-                refreshEpg()
+                ensureGroupLoaded()
             }
         }
         viewModelScope.launch {
@@ -80,17 +80,22 @@ class GuideViewModel(
                 )
                 try {
                     val channels = liveRepository.channels(playlist)
-                    val groups = channels
-                        .groupingBy { it.group }
-                        .eachCount()
-                        .map { (name, count) -> GuideGroup(name, count) }
+                    val counts = channels.groupingBy { it.group }.eachCount()
+                    // The channel load is capped on huge panels, so the panel's
+                    // own category list fills in groups the cap cut off (their
+                    // channels are fetched on demand when picked).
+                    val panelNames = runCatching { liveRepository.panelGroups(playlist) }
+                        .getOrDefault(emptyList())
+                    val groups = (counts.keys + panelNames)
+                        .distinct()
+                        .map { name -> GuideGroup(name, counts[name] ?: 0) }
                         .sortedBy { it.name.lowercase() }
                     _state.value = _state.value.copy(
                         channels = channels,
                         groups = groups,
                         loading = false,
                     )
-                    refreshEpg()
+                    ensureGroupLoaded()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -124,6 +129,44 @@ class GuideViewModel(
     fun removeGroup(name: String) {
         viewModelScope.launch {
             settingsStore.saveGuideGroups(_state.value.selectedGroups - name)
+        }
+    }
+
+    private var groupLoadJob: Job? = null
+
+    /**
+     * Make sure the current group's channels are in memory (fetching the
+     * category on demand when the capped full load missed it), then load EPG.
+     */
+    private fun ensureGroupLoaded() {
+        val s = _state.value
+        val playlist = s.playlist ?: return
+        val group = currentGroup(s) ?: return
+        if (s.loading || s.channels.any { it.group == group }) {
+            refreshEpg()
+            return
+        }
+        groupLoadJob?.cancel()
+        groupLoadJob = viewModelScope.launch {
+            _state.value = _state.value.copy(epgLoading = true)
+            try {
+                val extra = liveRepository.channelsForGroup(playlist, group)
+                if (extra.isNotEmpty()) {
+                    val known = _state.value.channels.mapTo(HashSet()) { it.url }
+                    _state.value = _state.value.copy(
+                        channels = _state.value.channels + extra.filter { it.url !in known },
+                        groups = _state.value.groups.map {
+                            if (it.name == group && it.count == 0) GuideGroup(group, extra.size) else it
+                        },
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                /* group stays empty; the list shows its empty state */
+            }
+            _state.value = _state.value.copy(epgLoading = false)
+            refreshEpg()
         }
     }
 
