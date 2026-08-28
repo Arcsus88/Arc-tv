@@ -80,6 +80,13 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
     var autoNext by remember { mutableStateOf<NextEp?>(null) }
     var secondsLeft by remember { mutableStateOf(0) }
 
+    // Diagnosing instant player exits: what we launched and when, plus the
+    // stream to show in the "that didn't play" dialog when the player dies
+    // within seconds of starting.
+    var lastStream by remember { mutableStateOf<com.arcsus.arctv.data.ResolvedStream?>(null) }
+    var launchedAt by remember { mutableStateOf(0L) }
+    var quickExit by remember { mutableStateOf<com.arcsus.arctv.data.ResolvedStream?>(null) }
+
     // Launch the external player *for result*. Players that report completion
     // (MX Player) auto-advance instantly. Players that report nothing (VLC) fall
     // back to an "Up next" countdown shown when you return.
@@ -87,9 +94,12 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
         val data = result.data
+        val elapsed = System.currentTimeMillis() - launchedAt
         when {
             playbackCompleted(data) -> viewModel.playNextEpisode()
             hasPlaybackInfo(data) -> Unit // player says stopped early — don't advance
+            launchedAt > 0 && elapsed < 12_000 && lastStream != null ->
+                quickExit = lastStream // player died almost immediately — diagnose
             else -> (viewModel.sheet.value as? BrowseViewModel.Sheet.Sources)?.next?.let {
                 autoNext = it
             }
@@ -112,6 +122,8 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
     LaunchedEffect(playRequest) {
         playRequest?.let { stream ->
             val launched = try {
+                lastStream = stream
+                launchedAt = System.currentTimeMillis()
                 playLauncher.launch(buildPlayIntentForResult(stream.streamUrl, stream.filename))
                 true
             } catch (e: android.content.ActivityNotFoundException) {
@@ -160,6 +172,46 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
     detail?.let { d -> DetailsScreen(d, viewModel) }
 
     SheetHost(sheet, viewModel)
+
+    quickExit?.let { stream ->
+        val host = runCatching { java.net.URI(stream.streamUrl).host }.getOrNull() ?: "unknown host"
+        SheetDialog("That didn't play", onDismiss = { quickExit = null }) {
+            Text(
+                stream.filename.ifBlank { "(no filename)" },
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "from $host",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "The player closed within seconds. Either the link isn't reachable from this " +
+                    "device, or the player doesn't like being launched this way. Try the simple " +
+                    "launch — it starts the player exactly like Live TV does.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = {
+                    quickExit = null
+                    launchedAt = 0L
+                    if (!playVideo(context, stream.streamUrl, stream.filename)) {
+                        android.widget.Toast.makeText(
+                            context, "No video player installed.", android.widget.Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }) { Text("Simple launch") }
+                Spacer(Modifier.width(12.dp))
+                OutlinedButton(onClick = { quickExit = null }) { Text("Close") }
+            }
+        }
+    }
 
     autoNext?.let { n ->
         SheetDialog("Up next", onDismiss = { autoNext = null }) {
