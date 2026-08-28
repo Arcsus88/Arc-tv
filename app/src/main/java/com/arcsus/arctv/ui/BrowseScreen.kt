@@ -42,6 +42,7 @@ import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -192,11 +193,17 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
     val state by viewModel.state.collectAsState()
     val rows = if (state.favorites.isEmpty()) state.rows
     else listOf(com.arcsus.arctv.data.CatalogRow("♥ Favourites", state.favorites)) + state.rows
+    val heroItems = state.rows.firstOrNull()?.items?.take(10).orEmpty()
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(20.dp),
         contentPadding = PaddingValues(bottom = 32.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
+        if (heroItems.isNotEmpty()) {
+            item(key = "__hero") {
+                HeroSpotlight(heroItems) { viewModel.openDetails(it) }
+            }
+        }
         items(rows, key = { it.title }) { row ->
             Column {
                 Text(row.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -209,6 +216,108 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
             }
         }
     }
+}
+
+/**
+ * The web app's trending hero, TV-shaped: one big auto-cycling spotlight card
+ * with a fanned poster stack. OK opens the featured title's details.
+ */
+@Composable
+private fun HeroSpotlight(items: List<CatalogItem>, onOpen: (CatalogItem) -> Unit) {
+    var index by remember(items) { mutableStateOf(0) }
+    LaunchedEffect(items) {
+        while (true) {
+            delay(8000)
+            index = (index + 1) % items.size
+        }
+    }
+    val item = items[index]
+    Card(onClick = { onOpen(item) }, modifier = Modifier.fillMaxWidth().height(250.dp)) {
+        Box(Modifier.fillMaxSize()) {
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.horizontalGradient(listOf(ArcBlue.copy(alpha = 0.18f), Color.Transparent)),
+                ),
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "TRENDING",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = ArcBlue,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        item.title,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (item.year.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            item.year + if (item.isTv) "  ·  TV" else "",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (item.overview.isNotBlank()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            item.overview,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth(0.9f),
+                        )
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        items.forEachIndexed { i, _ ->
+                            Box(
+                                Modifier
+                                    .padding(end = 6.dp)
+                                    .size(if (i == index) 8.dp else 6.dp)
+                                    .background(
+                                        if (i == index) ArcBlue else Color.White.copy(alpha = 0.25f),
+                                        RoundedCornerShape(50),
+                                    ),
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.width(20.dp))
+                // Fanned poster stack: previous and next peek behind the featured one.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    HeroPoster(items[(index - 1 + items.size) % items.size], 92.dp, 138.dp, dim = true)
+                    Spacer(Modifier.width(10.dp))
+                    HeroPoster(item, 140.dp, 210.dp, dim = false)
+                    Spacer(Modifier.width(10.dp))
+                    HeroPoster(items[(index + 1) % items.size], 92.dp, 138.dp, dim = true)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroPoster(item: CatalogItem, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp, dim: Boolean) {
+    AsyncImage(
+        model = item.poster,
+        contentDescription = item.title,
+        contentScale = ContentScale.Crop,
+        alpha = if (dim) 0.45f else 1f,
+        modifier = Modifier
+            .width(width)
+            .height(height)
+            .clip(RoundedCornerShape(10.dp)),
+    )
 }
 
 @Composable
