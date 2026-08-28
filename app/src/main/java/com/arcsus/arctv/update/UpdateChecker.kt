@@ -35,8 +35,11 @@ data class UpdateInfo(val version: String, val apkUrl: String)
 class UpdateChecker(private val context: Context) {
 
     companion object {
-        private const val LATEST_RELEASE_URL =
-            "https://api.github.com/repos/Arcsus88/Arc-tv/releases/latest"
+        // The /releases/latest endpoint sits behind a cache that can lag a
+        // fresh publish by a while; listing releases (with no-cache) shows a
+        // new build the moment the workflow uploads it.
+        private const val RELEASES_URL =
+            "https://api.github.com/repos/Arcsus88/Arc-tv/releases?per_page=10"
     }
 
     private val client = OkHttpClient()
@@ -44,15 +47,17 @@ class UpdateChecker(private val context: Context) {
 
     suspend fun check(): UpdateInfo? = withContext(Dispatchers.IO) {
         val request = Request.Builder()
-            .url(LATEST_RELEASE_URL)
+            .url(RELEASES_URL)
             .header("Accept", "application/vnd.github+json")
+            .header("Cache-Control", "no-cache")
             .build()
         client.newCall(request).execute().use { response ->
             // Don't swallow failures as "no update" — GitHub rate-limits
             // anonymous API calls per IP, and that must not read as up-to-date.
             if (!response.isSuccessful) throw IOException("GitHub answered HTTP ${response.code}")
-            val release = json.decodeFromString<GithubRelease>(response.body!!.string())
-            if (release.draft || release.prerelease) return@withContext null
+            val releases = json.decodeFromString<List<GithubRelease>>(response.body!!.string())
+            val release = releases.firstOrNull { !it.draft && !it.prerelease }
+                ?: return@withContext null
             val remoteVersion = release.tagName.removePrefix("v")
             if (!isNewer(remoteVersion, BuildConfig.VERSION_NAME)) return@withContext null
             val apk = release.assets.firstOrNull { it.name.endsWith(".apk") }

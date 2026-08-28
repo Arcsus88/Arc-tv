@@ -195,7 +195,6 @@ private fun GroupPicker(
         val needle = search.trim().lowercase()
         val matches = state.groups
             .filter { needle.isEmpty() || it.name.lowercase().contains(needle) }
-            .take(60)
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -254,8 +253,25 @@ private fun GuideList(
                             contentDescription = null,
                             modifier = Modifier.size(36.dp),
                         )
-                        Spacer(Modifier.width(12.dp))
+                    } else {
+                        // Lettered tile, matching the web guide's logo fallback.
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                        ) {
+                            Text(
+                                channel.name.trim()
+                                    .firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "•",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = ArcBlue,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
                     }
+                    Spacer(Modifier.width(12.dp))
                     Column(Modifier.width(220.dp)) {
                         Text(
                             channel.name,

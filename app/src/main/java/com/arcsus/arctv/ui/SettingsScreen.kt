@@ -41,13 +41,45 @@ import com.arcsus.arctv.data.SavedPlaylist
 import com.arcsus.arctv.ui.theme.ArcBlue
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel) {
+fun SettingsScreen(viewModel: SettingsViewModel, updateViewModel: UpdateViewModel) {
     val state by viewModel.state.collectAsState()
+    val updateState by updateViewModel.state.collectAsState()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        item { SectionTitle("App") }
+
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Arc TV ${com.arcsus.arctv.BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    val feedback = when {
+                        updateState.checking -> "Checking…"
+                        updateState.upToDate -> "You're on the latest version"
+                        updateState.error != null -> updateState.error
+                        else -> "Updates install from GitHub Releases"
+                    }
+                    Text(
+                        feedback ?: "",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Button(
+                    onClick = { updateViewModel.checkForUpdate() },
+                    enabled = !updateState.checking,
+                ) {
+                    Text("Check for updates")
+                }
+            }
+        }
+
         item { SectionTitle("Debrid providers") }
 
         item {
