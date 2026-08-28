@@ -1,7 +1,5 @@
 package com.arcsus.arctv.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -87,23 +85,28 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
     var launchedAt by remember { mutableStateOf(0L) }
     var quickExit by remember { mutableStateOf<com.arcsus.arctv.data.ResolvedStream?>(null) }
 
-    // Launch the external player *for result*. Players that report completion
-    // (MX Player) auto-advance instantly. Players that report nothing (VLC) fall
-    // back to an "Up next" countdown shown when you return.
-    val playLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        val data = result.data
-        val elapsed = System.currentTimeMillis() - launchedAt
-        when {
-            playbackCompleted(data) -> viewModel.playNextEpisode()
-            hasPlaybackInfo(data) -> Unit // player says stopped early — don't advance
-            launchedAt > 0 && elapsed < 12_000 && lastStream != null ->
-                quickExit = lastStream // player died almost immediately — diagnose
-            else -> (viewModel.sheet.value as? BrowseViewModel.Sheet.Sources)?.next?.let {
-                autoNext = it
+    // Movies launch with the same plain NEW_TASK intent Live TV uses — the
+    // for-result flow made some TV players (VLC included) die before showing
+    // any UI. Without a result we watch our own lifecycle instead: coming back
+    // within seconds means the player choked (diagnose); coming back after a
+    // while means the video likely ended (offer the next episode).
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && launchedAt > 0) {
+                val elapsed = System.currentTimeMillis() - launchedAt
+                launchedAt = 0L
+                if (elapsed < 12_000) {
+                    quickExit = lastStream
+                } else {
+                    (viewModel.sheet.value as? BrowseViewModel.Sheet.Sources)?.next?.let {
+                        autoNext = it
+                    }
+                }
             }
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // Count down, then auto-play the next episode unless cancelled.
@@ -121,15 +124,10 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
 
     LaunchedEffect(playRequest) {
         playRequest?.let { stream ->
-            val launched = try {
-                lastStream = stream
-                launchedAt = System.currentTimeMillis()
-                playLauncher.launch(buildPlayIntentForResult(stream.streamUrl, stream.filename))
-                true
-            } catch (e: android.content.ActivityNotFoundException) {
-                false
-            }
-            if (!launched) {
+            lastStream = stream
+            launchedAt = System.currentTimeMillis()
+            if (!playVideo(context, stream.streamUrl, stream.filename)) {
+                launchedAt = 0L
                 android.widget.Toast.makeText(
                     context, "No video player installed.", android.widget.Toast.LENGTH_LONG,
                 ).show()
@@ -190,9 +188,9 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                "The player closed within seconds. Either the link isn't reachable from this " +
-                    "device, or the player doesn't like being launched this way. Try the simple " +
-                    "launch — it starts the player exactly like Live TV does.",
+                "The player closed within seconds of starting — the link probably isn't " +
+                    "reachable from this device, or the file format defeated the player. " +
+                    "Try again, or pick a different source.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -200,13 +198,15 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Button(onClick = {
                     quickExit = null
-                    launchedAt = 0L
+                    lastStream = stream
+                    launchedAt = System.currentTimeMillis()
                     if (!playVideo(context, stream.streamUrl, stream.filename)) {
+                        launchedAt = 0L
                         android.widget.Toast.makeText(
                             context, "No video player installed.", android.widget.Toast.LENGTH_LONG,
                         ).show()
                     }
-                }) { Text("Simple launch") }
+                }) { Text("Try again") }
                 Spacer(Modifier.width(12.dp))
                 OutlinedButton(onClick = { quickExit = null }) { Text("Close") }
             }
