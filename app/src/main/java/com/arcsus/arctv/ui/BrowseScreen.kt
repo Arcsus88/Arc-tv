@@ -271,105 +271,78 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
 }
 
 /**
- * The web app's trending hero, TV-shaped: one big auto-cycling spotlight card
- * with a fanned poster stack. OK opens the featured title's details.
+ * The web app's trending hero, TV-shaped: one auto-cycling spotlight card.
+ * Deliberately lightweight — budget TV GPUs choke on gradient overlays and
+ * multiple cropped images, so this draws flat surfaces and a single poster.
  */
 @Composable
 private fun HeroSpotlight(items: List<CatalogItem>, onOpen: (CatalogItem) -> Unit) {
     var index by remember(items) { mutableStateOf(0) }
     LaunchedEffect(items) {
         while (true) {
-            delay(8000)
+            delay(12_000)
             index = (index + 1) % items.size
         }
     }
     val item = items[index]
-    Card(onClick = { onOpen(item) }, modifier = Modifier.fillMaxWidth().height(250.dp)) {
-        Box(Modifier.fillMaxSize()) {
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.horizontalGradient(listOf(ArcBlue.copy(alpha = 0.18f), Color.Transparent)),
-                ),
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
-            ) {
-                Column(Modifier.weight(1f)) {
+    Card(onClick = { onOpen(item) }, modifier = Modifier.fillMaxWidth().height(220.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 16.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "TRENDING",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = ArcBlue,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (item.year.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        "TRENDING",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = ArcBlue,
-                        fontWeight = FontWeight.Bold,
+                        item.year + if (item.isTv) "  ·  TV" else "",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.height(8.dp))
+                }
+                if (item.overview.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
                     Text(
-                        item.title,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2,
+                        item.overview,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth(0.9f),
                     )
-                    if (item.year.isNotBlank()) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            item.year + if (item.isTv) "  ·  TV" else "",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (item.overview.isNotBlank()) {
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            item.overview,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth(0.9f),
-                        )
-                    }
-                    Spacer(Modifier.height(14.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        items.forEachIndexed { i, _ ->
-                            Box(
-                                Modifier
-                                    .padding(end = 6.dp)
-                                    .size(if (i == index) 8.dp else 6.dp)
-                                    .background(
-                                        if (i == index) ArcBlue else Color.White.copy(alpha = 0.25f),
-                                        RoundedCornerShape(50),
-                                    ),
-                            )
-                        }
-                    }
                 }
-                Spacer(Modifier.width(20.dp))
-                // Fanned poster stack: previous and next peek behind the featured one.
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    HeroPoster(items[(index - 1 + items.size) % items.size], 92.dp, 138.dp, dim = true)
-                    Spacer(Modifier.width(10.dp))
-                    HeroPoster(item, 140.dp, 210.dp, dim = false)
-                    Spacer(Modifier.width(10.dp))
-                    HeroPoster(items[(index + 1) % items.size], 92.dp, 138.dp, dim = true)
-                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "${index + 1} / ${items.size}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
+            Spacer(Modifier.width(20.dp))
+            AsyncImage(
+                model = item.poster,
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .width(126.dp)
+                    .height(188.dp)
+                    .clip(RoundedCornerShape(10.dp)),
+            )
         }
     }
-}
-
-@Composable
-private fun HeroPoster(item: CatalogItem, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp, dim: Boolean) {
-    AsyncImage(
-        model = item.poster,
-        contentDescription = item.title,
-        contentScale = ContentScale.Crop,
-        alpha = if (dim) 0.45f else 1f,
-        modifier = Modifier
-            .width(width)
-            .height(height)
-            .clip(RoundedCornerShape(10.dp)),
-    )
 }
 
 @Composable
