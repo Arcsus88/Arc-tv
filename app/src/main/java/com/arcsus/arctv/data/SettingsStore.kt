@@ -29,6 +29,14 @@ data class SavedPlaylist(
     val key: String get() = if (isXtream) "xtream:$url|$username" else url
 }
 
+/** A live channel the user hearted, kept independent of playlist reloads. */
+@Serializable
+data class SavedChannel(
+    val name: String = "",
+    val url: String = "",
+    val logo: String = "",
+)
+
 /** User settings: TorBox token override and the Live TV playlists. */
 class SettingsStore(context: Context) {
 
@@ -42,6 +50,7 @@ class SettingsStore(context: Context) {
         val GUIDE_GROUPS = stringPreferencesKey("guide_groups")
         val GUIDE_ACTIVE_GROUP = stringPreferencesKey("guide_active_group")
         val FAVORITES = stringPreferencesKey("favorites")
+        val FAVORITE_CHANNELS = stringPreferencesKey("favorite_channels")
     }
 
     val torboxToken: Flow<String> = dataStore.data.map { it[Keys.TORBOX_TOKEN].orEmpty() }
@@ -110,6 +119,21 @@ class SettingsStore(context: Context) {
         val without = current.filterNot { it.id == item.id && it.type == item.type }
         val next = if (without.size == current.size) listOf(item) + current else without
         dataStore.edit { it[Keys.FAVORITES] = json.encodeToString(next) }
+    }
+
+    /** Live channels the user hearted, newest first (keyed by stream URL). */
+    val favoriteChannels: Flow<List<SavedChannel>> = dataStore.data.map { prefs ->
+        val raw = prefs[Keys.FAVORITE_CHANNELS]
+        if (raw.isNullOrBlank()) emptyList()
+        else runCatching { json.decodeFromString<List<SavedChannel>>(raw) }.getOrDefault(emptyList())
+    }
+
+    /** Adds the channel, or removes it when it is already a favourite. */
+    suspend fun toggleFavoriteChannel(channel: SavedChannel) {
+        val current = favoriteChannels.first()
+        val without = current.filterNot { it.url == channel.url }
+        val next = if (without.size == current.size) listOf(channel) + current else without
+        dataStore.edit { it[Keys.FAVORITE_CHANNELS] = json.encodeToString(next) }
     }
 
     private fun decodePlaylists(raw: String?): List<SavedPlaylist> {

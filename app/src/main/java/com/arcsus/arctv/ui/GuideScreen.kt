@@ -40,6 +40,7 @@ import coil.compose.AsyncImage
 import androidx.tv.material3.Button
 import androidx.tv.material3.Card
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
 import com.arcsus.arctv.data.EpgEntry
 import com.arcsus.arctv.data.LiveChannel
@@ -101,9 +102,7 @@ fun GuideScreen(viewModel: GuideViewModel) {
             }
 
             else -> {
-                val validSelected = state.selectedGroups.filter { name ->
-                    state.groups.any { it.name == name }
-                }
+                val validSelected = viewModel.validGroups(state)
                 val current = viewModel.currentGroup(state)
                 val showPicker = picking || validSelected.isEmpty()
 
@@ -154,7 +153,7 @@ fun GuideScreen(viewModel: GuideViewModel) {
                         )
                         Spacer(Modifier.height(8.dp))
                     }
-                    val groupChannels = state.channels.filter { it.group == current }
+                    val groupChannels = viewModel.channelsFor(state, current)
                     if (groupChannels.isEmpty()) {
                         Text(
                             if (state.epgLoading) "Loading channels…" else "No channels in this group.",
@@ -167,6 +166,8 @@ fun GuideScreen(viewModel: GuideViewModel) {
                             epg = state.epg,
                             epgLoading = state.epgLoading,
                             nowMs = state.nowMs,
+                            favoriteUrls = state.favChannels.mapTo(HashSet()) { it.url },
+                            onToggleFavorite = { viewModel.toggleFavorite(it) },
                             onPlay = play,
                         )
                     }
@@ -245,13 +246,16 @@ private fun GuideList(
     epg: Map<String, List<EpgEntry>>,
     epgLoading: Boolean,
     nowMs: Long,
+    favoriteUrls: Set<String>,
+    onToggleFavorite: (LiveChannel) -> Unit,
     onPlay: (LiveChannel) -> Unit,
 ) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         items(channels.size, key = { channels[it].id }) { index ->
             val channel = channels[index]
             val (now, next) = nowAndNext(epg[channel.url], nowMs)
-            Card(onClick = { onPlay(channel) }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+            Card(onClick = { onPlay(channel) }, modifier = Modifier.weight(1f)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -353,6 +357,11 @@ private fun GuideList(
                         }
                     }
                 }
+            }
+            Spacer(Modifier.width(8.dp))
+            OutlinedButton(onClick = { onToggleFavorite(channel) }) {
+                Text(if (channel.url in favoriteUrls) "♥" else "♡", color = ArcBlue)
+            }
             }
         }
     }

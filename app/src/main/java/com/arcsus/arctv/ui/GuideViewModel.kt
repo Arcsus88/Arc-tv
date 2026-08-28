@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.arcsus.arctv.data.EpgEntry
 import com.arcsus.arctv.data.LiveChannel
 import com.arcsus.arctv.data.LiveRepository
+import com.arcsus.arctv.data.SavedChannel
 import com.arcsus.arctv.data.SavedPlaylist
 import com.arcsus.arctv.data.SettingsStore
 import kotlinx.coroutines.CancellationException
@@ -22,6 +23,11 @@ class GuideViewModel(
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
+    companion object {
+        /** Virtual guide group holding the user's hearted channels. */
+        const val FAV_GROUP = "♥ Favourites"
+    }
+
     data class UiState(
         val playlist: SavedPlaylist? = null,
         val epgCapable: Boolean = false,
@@ -30,6 +36,8 @@ class GuideViewModel(
         val selectedGroups: List<String> = emptyList(),
         val activeGroup: String? = null,
         val epg: Map<String, List<EpgEntry>> = emptyMap(),
+        /** Hearted channels shown under the virtual [FAV_GROUP] chip. */
+        val favChannels: List<LiveChannel> = emptyList(),
         val loading: Boolean = true,
         val epgLoading: Boolean = false,
         val error: String? = null,
@@ -45,6 +53,22 @@ class GuideViewModel(
         viewModelScope.launch {
             settingsStore.guideGroups.collect { groups ->
                 _state.value = _state.value.copy(selectedGroups = groups)
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.favoriteChannels.collect { favs ->
+                _state.value = _state.value.copy(
+                    favChannels = favs.mapIndexed { i, c ->
+                        LiveChannel(
+                            id = "fav:$i:${c.url}",
+                            name = c.name,
+                            logo = c.logo,
+                            group = FAV_GROUP,
+                            url = c.url,
+                        )
+                    },
+                )
+                if (currentGroup(_state.value) == FAV_GROUP) refreshEpg()
             }
         }
         viewModelScope.launch {
@@ -108,10 +132,27 @@ class GuideViewModel(
         }
     }
 
+    /** Selectable chips: the virtual Favourites group first, then picked groups. */
+    fun validGroups(s: UiState): List<String> {
+        val selected = s.selectedGroups.filter { name -> s.groups.any { it.name == name } }
+        return if (s.favChannels.isEmpty()) selected else listOf(FAV_GROUP) + selected
+    }
+
+    fun channelsFor(s: UiState, group: String): List<LiveChannel> =
+        if (group == FAV_GROUP) s.favChannels else s.channels.filter { it.group == group }
+
     /** The group actually shown: the active one if still selected, else the first. */
     fun currentGroup(s: UiState): String? {
-        val valid = s.selectedGroups.filter { name -> s.groups.any { it.name == name } }
+        val valid = validGroups(s)
         return if (s.activeGroup != null && valid.contains(s.activeGroup)) s.activeGroup else valid.firstOrNull()
+    }
+
+    fun toggleFavorite(channel: LiveChannel) {
+        viewModelScope.launch {
+            settingsStore.toggleFavoriteChannel(
+                SavedChannel(name = channel.name, url = channel.url, logo = channel.logo),
+            )
+        }
     }
 
     fun selectGroup(name: String) {
@@ -142,7 +183,7 @@ class GuideViewModel(
         val s = _state.value
         val playlist = s.playlist ?: return
         val group = currentGroup(s) ?: return
-        if (s.loading || s.channels.any { it.group == group }) {
+        if (group == FAV_GROUP || s.loading || s.channels.any { it.group == group }) {
             refreshEpg()
             return
         }
@@ -173,9 +214,9 @@ class GuideViewModel(
     private fun refreshEpg() {
         val s = _state.value
         val playlist = s.playlist ?: return
-        if (!s.epgCapable || s.channels.isEmpty()) return
+        if (!s.epgCapable) return
         val group = currentGroup(s) ?: return
-        val groupChannels = s.channels.filter { it.group == group }
+        val groupChannels = channelsFor(s, group)
         if (groupChannels.isEmpty()) return
         epgJob?.cancel()
         epgJob = viewModelScope.launch {

@@ -35,11 +35,15 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.Card
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
 import com.arcsus.arctv.data.LiveChannel
 
 /** How many channels a grid renders at once — huge playlists would lock up the UI. */
 private const val MAX_RENDERED = 400
+
+/** Virtual group holding the user's hearted channels. */
+private const val FAV_GROUP = "♥ Favourites"
 
 @Composable
 fun LiveScreen(viewModel: LiveViewModel) {
@@ -111,7 +115,7 @@ fun LiveScreen(viewModel: LiveViewModel) {
             query.isNotBlank() -> {
                 val needle = query.trim().lowercase()
                 val results = state.channels.filter { it.name.lowercase().contains(needle) }
-                ChannelGrid(results, play)
+                ChannelGrid(results, state.favoriteUrls, play, viewModel::toggleFavorite)
             }
 
             selectedGroup == null -> {
@@ -121,6 +125,25 @@ fun LiveScreen(viewModel: LiveViewModel) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 24.dp),
                 ) {
+                    if (state.favorites.isNotEmpty()) {
+                        item(key = "__favourites") {
+                            Card(onClick = { selectedGroup = FAV_GROUP }) {
+                                Column(Modifier.padding(16.dp)) {
+                                    Text(
+                                        FAV_GROUP,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        "${state.favorites.size} channels",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
                     items(state.groups, key = { it.name }) { group ->
                         Card(onClick = { selectedGroup = group.name }) {
                             Column(Modifier.padding(16.dp)) {
@@ -152,14 +175,26 @@ fun LiveScreen(viewModel: LiveViewModel) {
                     )
                 }
                 Spacer(Modifier.height(12.dp))
-                ChannelGrid(state.channels.filter { it.group == group }, play)
+                val channels = if (group == FAV_GROUP) {
+                    state.favorites.mapIndexed { i, c ->
+                        LiveChannel(id = "fav:$i:${c.url}", name = c.name, logo = c.logo, group = FAV_GROUP, url = c.url)
+                    }
+                } else {
+                    state.channels.filter { it.group == group }
+                }
+                ChannelGrid(channels, state.favoriteUrls, play, viewModel::toggleFavorite)
             }
         }
     }
 }
 
 @Composable
-private fun ChannelGrid(channels: List<LiveChannel>, onPlay: (LiveChannel) -> Unit) {
+private fun ChannelGrid(
+    channels: List<LiveChannel>,
+    favoriteUrls: Set<String>,
+    onPlay: (LiveChannel) -> Unit,
+    onToggleFavorite: (LiveChannel) -> Unit,
+) {
     var visible by rememberSaveable(channels.size) { mutableStateOf(MAX_RENDERED) }
     if (channels.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -178,25 +213,31 @@ private fun ChannelGrid(channels: List<LiveChannel>, onPlay: (LiveChannel) -> Un
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         items(channels.take(visible), key = { it.id }) { channel ->
-            Card(onClick = { onPlay(channel) }) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(12.dp),
-                ) {
-                    if (channel.logo.isNotBlank()) {
-                        AsyncImage(
-                            model = channel.logo,
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp),
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Card(onClick = { onPlay(channel) }, modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(12.dp),
+                    ) {
+                        if (channel.logo.isNotBlank()) {
+                            AsyncImage(
+                                model = channel.logo,
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp),
+                            )
+                            Spacer(Modifier.width(10.dp))
+                        }
+                        Text(
+                            channel.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                        Spacer(Modifier.width(10.dp))
                     }
-                    Text(
-                        channel.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                }
+                Spacer(Modifier.width(6.dp))
+                OutlinedButton(onClick = { onToggleFavorite(channel) }) {
+                    Text(if (channel.url in favoriteUrls) "♥" else "♡")
                 }
             }
         }

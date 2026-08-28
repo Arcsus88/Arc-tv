@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.arcsus.arctv.data.LiveChannel
 import com.arcsus.arctv.data.LiveRepository
+import com.arcsus.arctv.data.SavedChannel
 import com.arcsus.arctv.data.SavedPlaylist
 import com.arcsus.arctv.data.SettingsStore
 import kotlinx.coroutines.CancellationException
@@ -26,12 +27,21 @@ class LiveViewModel(
         val groups: List<LiveGroup> = emptyList(),
         val loading: Boolean = false,
         val error: String? = null,
-    )
+        /** Hearted channels, newest first. */
+        val favorites: List<SavedChannel> = emptyList(),
+    ) {
+        val favoriteUrls: Set<String> get() = favorites.mapTo(HashSet()) { it.url }
+    }
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state
 
     init {
+        viewModelScope.launch {
+            settingsStore.favoriteChannels.collect { favs ->
+                _state.value = _state.value.copy(favorites = favs)
+            }
+        }
         viewModelScope.launch {
             // Keep the playlist list in sync with the Settings tab.
             settingsStore.playlists.collect { playlists ->
@@ -46,6 +56,14 @@ class LiveViewModel(
                     _state.value = _state.value.copy(active = null, channels = emptyList(), groups = emptyList())
                 }
             }
+        }
+    }
+
+    fun toggleFavorite(channel: LiveChannel) {
+        viewModelScope.launch {
+            settingsStore.toggleFavoriteChannel(
+                SavedChannel(name = channel.name, url = channel.url, logo = channel.logo),
+            )
         }
     }
 
