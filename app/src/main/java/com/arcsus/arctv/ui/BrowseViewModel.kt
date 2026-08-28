@@ -10,6 +10,7 @@ import com.arcsus.arctv.data.Genre
 import com.arcsus.arctv.data.Genres
 import com.arcsus.arctv.data.ResolvedStream
 import com.arcsus.arctv.data.Season
+import com.arcsus.arctv.data.SettingsStore
 import com.arcsus.arctv.data.Source
 import com.arcsus.arctv.data.TitleDetails
 import kotlinx.coroutines.CancellationException
@@ -30,7 +31,10 @@ enum class SortMode(val key: String, val label: String) {
     NEWEST("newest", "Newest"),
 }
 
-class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
+class BrowseViewModel(
+    private val repository: BrowseRepository,
+    private val settingsStore: SettingsStore,
+) : ViewModel() {
 
     /** The pop-up selection flow: seasons → episodes → sources. */
     sealed interface Sheet {
@@ -67,7 +71,12 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
         val discoverPage: Int = 0,
         val discoverTotalPages: Int = 1,
         val discoverLoading: Boolean = false,
+        /** Titles the user hearted — shown as the first Browse carousel. */
+        val favorites: List<CatalogItem> = emptyList(),
     ) {
+        fun isFavorite(item: CatalogItem): Boolean =
+            favorites.any { it.id == item.id && it.type == item.type }
+
         val currentGenres: List<Genre>
             get() = if (tab == BrowseTab.TV) genres.tv else genres.movie
     }
@@ -101,6 +110,15 @@ class BrowseViewModel(private val repository: BrowseRepository) : ViewModel() {
     init {
         loadHome()
         loadGenres()
+        viewModelScope.launch {
+            settingsStore.favorites.collect { favs ->
+                _state.update { it.copy(favorites = favs) }
+            }
+        }
+    }
+
+    fun toggleFavorite(item: CatalogItem) {
+        viewModelScope.launch { settingsStore.toggleFavorite(item) }
     }
 
     private fun loadGenres() {

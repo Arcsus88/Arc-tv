@@ -28,7 +28,7 @@ class ArcTvViewModelFactory(private val app: ArcTvApp) : ViewModelProvider.Facto
             TorrentsViewModel(app.repository) as T
 
         modelClass.isAssignableFrom(BrowseViewModel::class.java) ->
-            BrowseViewModel(app.browseRepository) as T
+            BrowseViewModel(app.browseRepository, app.settingsStore) as T
 
         modelClass.isAssignableFrom(UpdateViewModel::class.java) ->
             UpdateViewModel(UpdateChecker(app)) as T

@@ -41,6 +41,7 @@ class SettingsStore(context: Context) {
         val ACTIVE_PLAYLIST = stringPreferencesKey("active_playlist_key")
         val GUIDE_GROUPS = stringPreferencesKey("guide_groups")
         val GUIDE_ACTIVE_GROUP = stringPreferencesKey("guide_active_group")
+        val FAVORITES = stringPreferencesKey("favorites")
     }
 
     val torboxToken: Flow<String> = dataStore.data.map { it[Keys.TORBOX_TOKEN].orEmpty() }
@@ -94,6 +95,21 @@ class SettingsStore(context: Context) {
 
     suspend fun saveActiveGuideGroup(group: String) {
         dataStore.edit { it[Keys.GUIDE_ACTIVE_GROUP] = group }
+    }
+
+    /** Titles the user marked as favourites, newest first. */
+    val favorites: Flow<List<CatalogItem>> = dataStore.data.map { prefs ->
+        val raw = prefs[Keys.FAVORITES]
+        if (raw.isNullOrBlank()) emptyList()
+        else runCatching { json.decodeFromString<List<CatalogItem>>(raw) }.getOrDefault(emptyList())
+    }
+
+    /** Adds the title, or removes it when it is already a favourite. */
+    suspend fun toggleFavorite(item: CatalogItem) {
+        val current = favorites.first()
+        val without = current.filterNot { it.id == item.id && it.type == item.type }
+        val next = if (without.size == current.size) listOf(item) + current else without
+        dataStore.edit { it[Keys.FAVORITES] = json.encodeToString(next) }
     }
 
     private fun decodePlaylists(raw: String?): List<SavedPlaylist> {

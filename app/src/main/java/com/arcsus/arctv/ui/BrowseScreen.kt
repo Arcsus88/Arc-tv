@@ -190,12 +190,14 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
 @Composable
 private fun CatalogRows(viewModel: BrowseViewModel) {
     val state by viewModel.state.collectAsState()
+    val rows = if (state.favorites.isEmpty()) state.rows
+    else listOf(com.arcsus.arctv.data.CatalogRow("♥ Favourites", state.favorites)) + state.rows
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(20.dp),
         contentPadding = PaddingValues(bottom = 32.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        items(state.rows, key = { it.title }) { row ->
+        items(rows, key = { it.title }) { row ->
             Column {
                 Text(row.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
@@ -392,14 +394,22 @@ private fun DetailsScreen(ui: BrowseViewModel.DetailUi, viewModel: BrowseViewMod
                         Text(tagline, style = MaterialTheme.typography.bodyMedium, color = ArcBlue)
                     }
                     Spacer(Modifier.height(18.dp))
-                    Button(
-                        onClick = { viewModel.playFromDetails() },
-                        modifier = Modifier.focusRequester(playFocus),
-                        colors = ButtonDefaults.colors(containerColor = ArcBlue, contentColor = MaterialTheme.colorScheme.onPrimary),
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, Modifier.size(20.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (item.isTv) "Play — pick an episode" else "Play")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Button(
+                            onClick = { viewModel.playFromDetails() },
+                            modifier = Modifier.focusRequester(playFocus),
+                            colors = ButtonDefaults.colors(containerColor = ArcBlue, contentColor = MaterialTheme.colorScheme.onPrimary),
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (item.isTv) "Play — pick an episode" else "Play")
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        val browseState by viewModel.state.collectAsState()
+                        val fav = browseState.isFavorite(item)
+                        OutlinedButton(onClick = { viewModel.toggleFavorite(item) }) {
+                            Text(if (fav) "♥ Favourited" else "♡ Favourite")
+                        }
                     }
                     if (overview.isNotBlank()) {
                         Spacer(Modifier.height(20.dp))
