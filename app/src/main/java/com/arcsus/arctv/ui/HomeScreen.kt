@@ -125,6 +125,14 @@ private fun NavRail(
     preview: com.arcsus.arctv.data.SavedChannel?,
     onPreviewClick: (com.arcsus.arctv.data.SavedChannel) -> Unit,
 ) {
+    // Sky Glass behaviour: the rail slims down to initials while you're in
+    // the content, expanding as soon as focus lands back on it.
+    var railFocused by remember { mutableStateOf(false) }
+    val railWidth by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (railFocused) 206.dp else 58.dp,
+        label = "railWidth",
+    )
+    val expanded = railFocused
     // Live clock and date, Sky-style ("Monday \u00b7 19:11") at the rail's foot.
     val time by produceState(initialValue = clockNow()) {
         while (true) {
@@ -135,14 +143,15 @@ private fun NavRail(
     Column(
         Modifier
             .fillMaxHeight()
-            .width(206.dp)
+            .width(railWidth)
             .background(Color(0xFF0E1520))
-            .padding(horizontal = 14.dp, vertical = 18.dp),
+            .onFocusChanged { railFocused = it.hasFocus }
+            .padding(horizontal = 10.dp, vertical = 18.dp),
     ) {
         // Sky's preview slot: the first favourite channel, one press to play.
         // (A live video preview would hold the IPTV panel's single allowed
         // connection hostage, so artwork stands in for the tuner picture.)
-        if (preview != null) {
+        if (expanded && preview != null) {
             androidx.tv.material3.Card(
                 onClick = { onPreviewClick(preview) },
                 modifier = Modifier.fillMaxWidth().height(96.dp),
@@ -196,6 +205,7 @@ private fun NavRail(
                 activateOnFocus = true,
                 onActivate = { onSelect(index) },
                 subdued = title == "Settings",
+                expanded = expanded,
             )
             Spacer(Modifier.height(4.dp))
         }
@@ -206,23 +216,34 @@ private fun NavRail(
             activateOnFocus = false,
             onActivate = onSearch,
             icon = Icons.Default.Search,
+            expanded = expanded,
         )
         Spacer(Modifier.height(16.dp))
-        Column(Modifier.padding(horizontal = 8.dp)) {
+        if (expanded) {
+            Column(Modifier.padding(horizontal = 8.dp)) {
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = ArcBlue, fontWeight = FontWeight.Bold)) {
+                            append("Arc")
+                        }
+                        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(" TV") }
+                    },
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "${time.second} \u00b7 ${time.first}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
             Text(
-                buildAnnotatedString {
-                    withStyle(SpanStyle(color = ArcBlue, fontWeight = FontWeight.Bold)) {
-                        append("Arc")
-                    }
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(" TV") }
-                },
+                "A",
                 style = MaterialTheme.typography.titleLarge,
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                "${time.second} \u00b7 ${time.first}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = ArcBlue,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
             )
         }
     }
@@ -241,6 +262,7 @@ private fun RailItem(
     onActivate: () -> Unit,
     icon: ImageVector? = null,
     subdued: Boolean = false,
+    expanded: Boolean = true,
 ) {
     Surface(
         onClick = onActivate,
@@ -259,19 +281,36 @@ private fun RailItem(
             .fillMaxWidth()
             .onFocusChanged { if (it.isFocused && activateOnFocus) onActivate() },
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-        ) {
-            if (icon != null) {
-                Icon(icon, contentDescription = null, Modifier.size(16.dp))
-                Spacer(Modifier.width(10.dp))
+        if (expanded) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+            ) {
+                if (icon != null) {
+                    Icon(icon, contentDescription = null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(10.dp))
+                }
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                )
             }
-            Text(
-                title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            )
+        } else {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 11.dp),
+            ) {
+                if (icon != null) {
+                    Icon(icon, contentDescription = title, Modifier.size(16.dp))
+                } else {
+                    Text(
+                        title.take(1),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    )
+                }
+            }
         }
     }
 }

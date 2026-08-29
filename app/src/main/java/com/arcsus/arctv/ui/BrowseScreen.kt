@@ -696,8 +696,9 @@ private fun MoreTile(tv: Boolean, onClick: () -> Unit) {
 }
 
 /**
- * Sky's content tile: wide 16:9 artwork with the title in plain text below.
- * Falls back to a centre crop of the poster when no wide art exists.
+ * Sky Glass content tile: wide 16:9 artwork with the title overlaid on a
+ * bottom scrim (and the Film/TV badge above it in mixed lists). Falls back
+ * to a centre crop of the poster when no wide art exists.
  */
 @Composable
 private fun WideTile(
@@ -707,23 +708,36 @@ private fun WideTile(
     onFocus: ((CatalogItem) -> Unit)? = null,
     onClick: () -> Unit,
 ) {
-    Column(modifier) {
-        Card(
-            onClick = onClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .let { m ->
-                    if (onFocus == null) m
-                    else m.onFocusChanged { if (it.isFocused) onFocus(item) }
-                },
-        ) {
-            Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
-                AsyncImage(
-                    model = item.backdrop.ifBlank { item.poster },
-                    contentDescription = item.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
+    Card(
+        onClick = onClick,
+        modifier = modifier.let { m ->
+            if (onFocus == null) m
+            else m.onFocusChanged { if (it.isFocused) onFocus(item) }
+        },
+    ) {
+        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
+            AsyncImage(
+                model = item.backdrop.ifBlank { item.poster },
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f)),
+                        ),
+                    ),
+            )
+            Column(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(horizontal = 9.dp, vertical = 7.dp),
+            ) {
                 if (showType) {
                     Text(
                         if (item.isTv) "TV" else "Film",
@@ -731,29 +745,20 @@ private fun WideTile(
                         color = ArcBlue,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(6.dp)
-                            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
                             .padding(horizontal = 5.dp, vertical = 1.dp),
                     )
+                    Spacer(Modifier.height(3.dp))
                 }
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            item.title,
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 2.dp),
-        )
-        if (item.year.isNotBlank()) {
-            Text(
-                item.year,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 2.dp),
-            )
         }
     }
 }
