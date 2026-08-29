@@ -6,8 +6,8 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 
 val ArcBlue = Color(0xFF569CFF)
-val ArcBackground = Color(0xFF101418)
-val ArcSurface = Color(0xFF1A2027)
+val ArcBackground = Color(0xFF0B0F15)
+val ArcSurface = Color(0xFF161D26)
 
 @Composable
 fun ArcTvTheme(content: @Composable () -> Unit) {
@@ -16,11 +16,11 @@ fun ArcTvTheme(content: @Composable () -> Unit) {
             primary = ArcBlue,
             background = ArcBackground,
             surface = ArcSurface,
-            surfaceVariant = Color(0xFF232B35),
+            surfaceVariant = Color(0xFF212B37),
             onPrimary = Color(0xFF06101F),
-            onBackground = Color(0xFFE8EDF2),
-            onSurface = Color(0xFFE8EDF2),
-            onSurfaceVariant = Color(0xFFB4BEC9),
+            onBackground = Color(0xFFEAF0F6),
+            onSurface = Color(0xFFEAF0F6),
+            onSurfaceVariant = Color(0xFFAFBAC7),
         ),
         content = content,
     )

@@ -1,5 +1,6 @@
 package com.arcsus.arctv.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -183,7 +184,16 @@ fun SettingsScreen(viewModel: SettingsViewModel, updateViewModel: UpdateViewMode
 
 @Composable
 private fun SectionTitle(title: String) {
-    Text(title, style = MaterialTheme.typography.titleLarge)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .width(4.dp)
+                .height(20.dp)
+                .background(ArcBlue, RoundedCornerShape(2.dp)),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(title, style = MaterialTheme.typography.titleLarge)
+    }
 }
 
 @Composable

@@ -64,6 +64,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.arcsus.arctv.data.CatalogItem
 import com.arcsus.arctv.data.Source
+import com.arcsus.arctv.ui.theme.ArcBackground
 import com.arcsus.arctv.ui.theme.ArcBlue
 
 @Composable
@@ -253,7 +254,13 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
     ) {
         if (heroItems.isNotEmpty()) {
             item(key = "__hero") {
-                HeroSpotlight(heroItems) { viewModel.openDetails(it) }
+                val heroArt by viewModel.heroArt.collectAsState()
+                HeroSpotlight(
+                    items = heroItems,
+                    art = heroArt,
+                    loadArt = viewModel::loadHeroArt,
+                    onOpen = { viewModel.openDetails(it) },
+                )
             }
         }
         items(rows, key = { it.title }) { row ->
@@ -271,12 +278,18 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
 }
 
 /**
- * The web app's trending hero, TV-shaped: one auto-cycling spotlight card.
- * Deliberately lightweight — budget TV GPUs choke on gradient overlays and
- * multiple cropped images, so this draws flat surfaces and a single poster.
+ * The trending hero: a billboard card cycling through the top titles. Uses the
+ * title's wide backdrop when known (poster as fallback), with a single flat
+ * scrim for text legibility — one image + one gradient, kept cheap for budget
+ * TV GPUs.
  */
 @Composable
-private fun HeroSpotlight(items: List<CatalogItem>, onOpen: (CatalogItem) -> Unit) {
+private fun HeroSpotlight(
+    items: List<CatalogItem>,
+    art: Map<String, String>,
+    loadArt: (CatalogItem) -> Unit,
+    onOpen: (CatalogItem) -> Unit,
+) {
     var index by remember(items) { mutableStateOf(0) }
     LaunchedEffect(items) {
         while (true) {
@@ -285,7 +298,45 @@ private fun HeroSpotlight(items: List<CatalogItem>, onOpen: (CatalogItem) -> Uni
         }
     }
     val item = items[index]
-    Card(onClick = { onOpen(item) }, modifier = Modifier.fillMaxWidth().height(212.dp)) {
+    // Warm the featured and next backdrops so cycling never pops in late art.
+    LaunchedEffect(item) {
+        loadArt(item)
+        loadArt(items[(index + 1) % items.size])
+    }
+    val backdrop = art["${item.type}:${item.id}"].orEmpty()
+    Card(onClick = { onOpen(item) }, modifier = Modifier.fillMaxWidth().height(238.dp)) {
+        Box(Modifier.fillMaxSize()) {
+            if (backdrop.isNotBlank()) {
+                AsyncImage(
+                    model = backdrop,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                ArcBackground.copy(alpha = 0.96f),
+                                ArcBackground.copy(alpha = 0.72f),
+                                Color.Transparent,
+                            ),
+                        ),
+                    ),
+                )
+            }
+            HeroContent(item, index, items, showPoster = backdrop.isBlank())
+        }
+    }
+}
+
+@Composable
+private fun HeroContent(
+    item: CatalogItem,
+    index: Int,
+    items: List<CatalogItem>,
+    showPoster: Boolean,
+) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 16.dp),
@@ -333,19 +384,20 @@ private fun HeroSpotlight(items: List<CatalogItem>, onOpen: (CatalogItem) -> Uni
                     )
                 }
             }
-            Spacer(Modifier.width(24.dp))
-            // 2:3 exactly — a squashed hero poster reads as broken.
-            AsyncImage(
-                model = item.poster,
-                contentDescription = item.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .width(120.dp)
-                    .height(180.dp)
-                    .clip(RoundedCornerShape(10.dp)),
-            )
+            if (showPoster) {
+                Spacer(Modifier.width(24.dp))
+                // 2:3 exactly — a squashed hero poster reads as broken.
+                AsyncImage(
+                    model = item.poster,
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .width(120.dp)
+                        .height(180.dp)
+                        .clip(RoundedCornerShape(10.dp)),
+                )
+            }
         }
-    }
 }
 
 @Composable
@@ -354,7 +406,7 @@ private fun FilterBar(viewModel: BrowseViewModel) {
     Column(Modifier.padding(bottom = 12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             BrowseTab.entries.forEach { tab ->
-                Chip(
+                ArcChip(
                     label = when (tab) {
                         BrowseTab.HOME -> "Home"
                         BrowseTab.MOVIES -> "Movies"
@@ -367,7 +419,7 @@ private fun FilterBar(viewModel: BrowseViewModel) {
             if (state.tab != BrowseTab.HOME) {
                 Spacer(Modifier.width(24.dp))
                 SortMode.entries.forEach { mode ->
-                    Chip(label = mode.label, selected = state.sortMode == mode, onClick = { viewModel.setSort(mode) })
+                    ArcChip(label = mode.label, selected = state.sortMode == mode, onClick = { viewModel.setSort(mode) })
                     Spacer(Modifier.width(8.dp))
                 }
             }
@@ -376,10 +428,10 @@ private fun FilterBar(viewModel: BrowseViewModel) {
             Spacer(Modifier.height(10.dp))
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
-                    Chip(label = "All", selected = state.genreId == null, onClick = { viewModel.setGenre(null) })
+                    ArcChip(label = "All", selected = state.genreId == null, onClick = { viewModel.setGenre(null) })
                 }
                 items(state.currentGenres, key = { it.id }) { genre ->
-                    Chip(label = genre.name, selected = state.genreId == genre.id, onClick = { viewModel.setGenre(genre.id) })
+                    ArcChip(label = genre.name, selected = state.genreId == genre.id, onClick = { viewModel.setGenre(genre.id) })
                 }
             }
         }
@@ -412,18 +464,6 @@ private fun DiscoverGrid(viewModel: BrowseViewModel) {
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
-    if (selected) {
-        Button(
-            onClick = onClick,
-            colors = ButtonDefaults.colors(containerColor = ArcBlue, contentColor = MaterialTheme.colorScheme.onPrimary),
-        ) { Text(label) }
-    } else {
-        OutlinedButton(onClick = onClick) { Text(label) }
     }
 }
 

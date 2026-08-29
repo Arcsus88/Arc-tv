@@ -1,6 +1,7 @@
 package com.arcsus.arctv.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
@@ -27,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -38,6 +41,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
 import com.arcsus.arctv.data.LiveChannel
+import com.arcsus.arctv.ui.theme.ArcBlue
 
 /** How many channels a grid renders at once — huge playlists would lock up the UI. */
 private const val MAX_RENDERED = 400
@@ -73,15 +77,15 @@ fun LiveScreen(viewModel: LiveViewModel) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             state.playlists.forEach { playlist ->
                 val isActive = state.active?.key == playlist.key
-                Button(
+                ArcChip(
+                    label = playlist.name,
+                    selected = isActive,
                     onClick = {
                         selectedGroup = null
                         query = ""
                         viewModel.load(playlist, refresh = !isActive)
                     },
-                ) {
-                    Text(if (isActive) "• ${playlist.name}" else playlist.name)
-                }
+                )
                 Spacer(Modifier.width(8.dp))
             }
             Spacer(Modifier.weight(1f))
@@ -132,6 +136,7 @@ fun LiveScreen(viewModel: LiveViewModel) {
                                     Text(
                                         FAV_GROUP,
                                         style = MaterialTheme.typography.titleMedium,
+                                        color = ArcBlue,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
@@ -225,8 +230,23 @@ private fun ChannelGrid(
                                 contentDescription = null,
                                 modifier = Modifier.size(32.dp),
                             )
-                            Spacer(Modifier.width(10.dp))
+                        } else {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                            ) {
+                                Text(
+                                    channel.name.trim()
+                                        .firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "•",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = ArcBlue,
+                                )
+                            }
                         }
+                        Spacer(Modifier.width(10.dp))
                         Text(
                             channel.name,
                             style = MaterialTheme.typography.bodyMedium,

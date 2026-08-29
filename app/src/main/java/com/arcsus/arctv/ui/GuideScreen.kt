@@ -111,17 +111,18 @@ fun GuideScreen(viewModel: GuideViewModel) {
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 ) {
                     validSelected.forEach { name ->
-                        Button(onClick = { viewModel.selectGroup(name) }) {
-                            Text(
-                                (if (name == current) "• " else "") + name.ifBlank { "Ungrouped" },
-                                maxLines = 1,
-                            )
-                        }
+                        ArcChip(
+                            label = name.ifBlank { "Ungrouped" },
+                            selected = name == current && !showPicker,
+                            onClick = { viewModel.selectGroup(name) },
+                        )
                         Spacer(Modifier.width(8.dp))
                     }
-                    Button(onClick = { picking = !picking }) {
-                        Text(if (showPicker) "Close picker" else "+ Add group")
-                    }
+                    ArcChip(
+                        label = if (showPicker) "Close picker" else "+ Add group",
+                        selected = showPicker,
+                        onClick = { picking = !picking },
+                    )
                     Spacer(Modifier.weight(1f))
                     Text(
                         formatTime(state.nowMs / 1000),
