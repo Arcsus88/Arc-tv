@@ -100,7 +100,7 @@ private fun NavRail(
     onSelect: (Int) -> Unit,
     onSearch: () -> Unit,
 ) {
-    // Live clock, Sky-style, under the wordmark.
+    // Live clock and date, Sky-style ("11:00 · Wed 20 Jul").
     val time by produceState(initialValue = clockNow()) {
         while (true) {
             value = clockNow()
@@ -125,11 +125,18 @@ private fun NavRail(
                 style = MaterialTheme.typography.titleLarge,
             )
             Spacer(Modifier.weight(1f))
-            Text(
-                time,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    time.first,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    time.second,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         Spacer(Modifier.height(26.dp))
         tabs.forEachIndexed { index, title ->
@@ -196,5 +203,8 @@ private fun RailItem(
     }
 }
 
-private fun clockNow(): String =
-    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+private fun clockNow(): Pair<String, String> {
+    val now = Date()
+    return SimpleDateFormat("HH:mm", Locale.getDefault()).format(now) to
+        SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(now)
+}

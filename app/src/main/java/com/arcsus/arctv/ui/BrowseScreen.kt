@@ -292,6 +292,15 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
                     items(row.items, key = { it.type + it.id }) { item ->
                         PosterTile(item, Modifier.width(150.dp)) { viewModel.openDetails(item) }
                     }
+                    // Sky's "More Top Picks" closer: jumps to the full catalogue.
+                    val moreType = row.items.firstOrNull()?.type
+                    if (moreType != null && !row.title.startsWith("♥")) {
+                        item(key = "__more") {
+                            MoreTile(tv = moreType == "tv") {
+                                viewModel.setTab(if (moreType == "tv") BrowseTab.TV else BrowseTab.MOVIES)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -630,6 +639,37 @@ private fun SearchResults(results: List<CatalogItem>, searching: Boolean, viewMo
         ) {
             gridItems(results, key = { it.type + it.id }) { item ->
                 PosterTile(item, Modifier, showType = true) { viewModel.openDetails(item) }
+            }
+        }
+    }
+}
+
+/** Row closer in the style of Sky's "More Top Picks" tile. */
+@Composable
+private fun MoreTile(tv: Boolean, onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = Modifier.width(150.dp)) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "MORE",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = ArcBlue,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    if (tv) "TV Shows" else "Movies",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text("→", style = MaterialTheme.typography.titleMedium, color = ArcBlue)
             }
         }
     }
