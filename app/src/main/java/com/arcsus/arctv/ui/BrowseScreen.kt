@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -609,18 +610,70 @@ private fun DiscoverGrid(viewModel: BrowseViewModel) {
                 snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
                     .collect { last -> if (last >= count - 12) viewModel.loadMoreDiscover() }
             }
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(7),
-                state = gridState,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(bottom = 32.dp, top = 4.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                gridItems(state.discoverItems, key = { it.type + it.id }) { item ->
-                    PosterTile(item, Modifier) { viewModel.openDetails(item) }
+            // Sky's browse pattern: the focused tile is described above the grid.
+            var focusedItem by remember { mutableStateOf<CatalogItem?>(null) }
+            Column(Modifier.fillMaxSize()) {
+                FocusDetailHeader(focusedItem)
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(7),
+                    state = gridState,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    contentPadding = PaddingValues(bottom = 32.dp, top = 4.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    gridItems(state.discoverItems, key = { it.type + it.id }) { item ->
+                        PosterTile(item, Modifier, onFocus = { focusedItem = it }) {
+                            viewModel.openDetails(item)
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+/** Sky's browse header: whichever tile the focus rests on is described here. */
+@Composable
+private fun FocusDetailHeader(item: CatalogItem?) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 10.dp).heightIn(min = 78.dp)) {
+        if (item == null) {
+            Text(
+                "Move around the grid — details appear here.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                item.title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                listOfNotNull(
+                    item.year.takeIf { it.isNotBlank() },
+                    if (item.isTv) "Series" else "Film",
+                ).joinToString("  ·  "),
+                style = MaterialTheme.typography.labelLarge,
+                color = ArcBlue,
+            )
+        }
+        if (item.overview.isNotBlank()) {
+            Spacer(Modifier.height(3.dp))
+            Text(
+                item.overview,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(0.8f),
+            )
         }
     }
 }
@@ -680,9 +733,16 @@ private fun PosterTile(
     item: CatalogItem,
     modifier: Modifier = Modifier,
     showType: Boolean = false,
+    onFocus: ((CatalogItem) -> Unit)? = null,
     onClick: () -> Unit,
 ) {
-    Card(onClick = onClick, modifier = modifier) {
+    Card(
+        onClick = onClick,
+        modifier = modifier.let { m ->
+            if (onFocus == null) m
+            else m.onFocusChanged { if (it.isFocused) onFocus(item) }
+        },
+    ) {
         // Strict 2:3 poster with the title on a bottom scrim — no text block
         // below fighting the artwork for height.
         Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
