@@ -72,7 +72,11 @@ import com.arcsus.arctv.data.Source
 import com.arcsus.arctv.ui.theme.ArcBlue
 
 @Composable
-fun BrowseScreen(viewModel: BrowseViewModel) {
+fun BrowseScreen(
+    viewModel: BrowseViewModel,
+    searchOpen: Boolean = false,
+    onSearchOpenChange: (Boolean) -> Unit = {},
+) {
     val state by viewModel.state.collectAsState()
     val sheet by viewModel.sheet.collectAsState()
     val detail by viewModel.detail.collectAsState()
@@ -142,34 +146,25 @@ fun BrowseScreen(viewModel: BrowseViewModel) {
     }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 40.dp)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-        ) {
-            Text("Browse", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.width(24.dp))
-            TvSearchField(
-                query = state.query,
-                onQueryChange = viewModel::setQuery,
-                onSearch = viewModel::search,
-                modifier = Modifier.weight(1f),
-                placeholder = "Search films & shows…",
-            )
-            if (state.searchResults != null) {
-                Spacer(Modifier.width(12.dp))
-                Button(onClick = { viewModel.clearSearch() }) { Text("Clear") }
-            }
-        }
-
-        if (state.searchResults == null) FilterBar(viewModel)
+        Spacer(Modifier.height(10.dp))
+        CategoryBar(viewModel)
 
         when {
-            state.searchResults != null -> SearchResults(state.searchResults!!, state.searching, viewModel)
             state.tab != BrowseTab.HOME -> DiscoverGrid(viewModel)
             state.loadingHome && state.rows.isEmpty() -> CenteredMessage("Loading catalogue…")
             state.error != null && state.rows.isEmpty() -> CenteredError(state.error!!) { viewModel.loadHome() }
             else -> CatalogRows(viewModel)
         }
+    }
+
+    if (searchOpen) {
+        SearchOverlay(
+            viewModel = viewModel,
+            onClose = {
+                onSearchOpenChange(false)
+                viewModel.clearSearch()
+            },
+        )
     }
 
     detail?.let { d -> DetailsScreen(d, viewModel) }
@@ -398,24 +393,29 @@ private fun HeroPoster(
     )
 }
 
+private fun categoryLabel(tab: BrowseTab): String = when (tab) {
+    BrowseTab.HOME -> "Home"
+    BrowseTab.MOVIES -> "Movies"
+    BrowseTab.TV -> "TV Shows"
+}
+
+/**
+ * Slim category line: one dropdown pill for Home/Movies/TV Shows, joined by
+ * sort and genre chips only while browsing the full catalogue.
+ */
 @Composable
-private fun FilterBar(viewModel: BrowseViewModel) {
+private fun CategoryBar(viewModel: BrowseViewModel) {
     val state by viewModel.state.collectAsState()
+    var menu by remember { mutableStateOf(false) }
     Column(Modifier.padding(bottom = 12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BrowseTab.entries.forEach { tab ->
-                ArcChip(
-                    label = when (tab) {
-                        BrowseTab.HOME -> "Home"
-                        BrowseTab.MOVIES -> "Movies"
-                        BrowseTab.TV -> "TV Shows"
-                    },
-                    selected = state.tab == tab,
-                    onClick = { viewModel.setTab(tab) },
-                )
-            }
+            ArcChip(
+                label = "${categoryLabel(state.tab)}  ▾",
+                selected = true,
+                onClick = { menu = true },
+            )
             if (state.tab != BrowseTab.HOME) {
-                Spacer(Modifier.width(24.dp))
+                Spacer(Modifier.width(16.dp))
                 SortMode.entries.forEach { mode ->
                     ArcChip(label = mode.label, selected = state.sortMode == mode, onClick = { viewModel.setSort(mode) })
                     Spacer(Modifier.width(8.dp))
@@ -430,6 +430,65 @@ private fun FilterBar(viewModel: BrowseViewModel) {
                 }
                 items(state.currentGenres, key = { it.id }) { genre ->
                     ArcChip(label = genre.name, selected = state.genreId == genre.id, onClick = { viewModel.setGenre(genre.id) })
+                }
+            }
+        }
+    }
+    if (menu) {
+        SheetDialog("Browse", onDismiss = { menu = false }) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                BrowseTab.entries.forEach { tab ->
+                    RowCard(
+                        lead = if (state.tab == tab) "●" else "",
+                        title = categoryLabel(tab),
+                        trailing = "",
+                        onClick = {
+                            viewModel.setTab(tab)
+                            menu = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Full-screen search, opened from the top bar's magnifier. */
+@Composable
+private fun SearchOverlay(viewModel: BrowseViewModel, onClose: () -> Unit) {
+    val state by viewModel.state.collectAsState()
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            Column(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 24.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Search",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.width(24.dp))
+                    TvSearchField(
+                        query = state.query,
+                        onQueryChange = viewModel::setQuery,
+                        onSearch = viewModel::search,
+                        modifier = Modifier.weight(1f),
+                        placeholder = "Search films & shows…",
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    OutlinedButton(onClick = onClose) { Text("Close") }
+                }
+                Spacer(Modifier.height(18.dp))
+                if (state.searchResults != null) {
+                    SearchResults(state.searchResults!!, state.searching, viewModel)
+                } else {
+                    Text(
+                        "Type a title and press OK to search films and shows.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
