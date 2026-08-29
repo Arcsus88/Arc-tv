@@ -210,7 +210,9 @@ class LiveRepository {
     suspend fun channels(playlist: SavedPlaylist, refresh: Boolean = false): List<LiveChannel> {
         if (!refresh) cache[playlist.key]?.let { return it }
         val loaded = withContext(Dispatchers.IO) {
-            withDerivedGroups(load(playlist))
+            // Panels ship decorative separator rows ("#### GENERAL ####") as
+            // fake channels; drop them before grouping.
+            withDerivedGroups(load(playlist).filterNot { it.name.contains("####") })
         }
         if (loaded.isEmpty()) throw LiveException("The playlist contains no channels.")
         cache[playlist.key] = loaded

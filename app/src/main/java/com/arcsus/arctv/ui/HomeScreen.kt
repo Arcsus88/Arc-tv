@@ -59,10 +59,12 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
     val settingsState by settingsViewModel.state.collectAsState()
     // Downloads/Torrents browse the Real-Debrid account, so they only appear
     // when Real-Debrid is connected (AllDebrid-only setups hide them).
+    // Movies and TV Shows are rail sections like Sky's menu; all three render
+    // the Browse screen in the matching mode.
     val tabs = if (settingsState.rdConnected) {
-        listOf("Browse", "Live", "Guide", "Downloads", "Torrents", "Settings")
+        listOf("Browse", "Movies", "TV Shows", "Live", "Guide", "Downloads", "Torrents", "Settings")
     } else {
-        listOf("Browse", "Live", "Guide", "Settings")
+        listOf("Browse", "Movies", "TV Shows", "Live", "Guide", "Settings")
     }
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     if (selectedTab >= tabs.size) selectedTab = tabs.size - 1
@@ -78,7 +80,14 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         NavRail(
             tabs = tabs,
             selected = selectedTab,
-            onSelect = { selectedTab = it },
+            onSelect = { index ->
+                selectedTab = index
+                when (tabs[index]) {
+                    "Browse" -> browseViewModel.setTab(BrowseTab.HOME)
+                    "Movies" -> browseViewModel.setTab(BrowseTab.MOVIES)
+                    "TV Shows" -> browseViewModel.setTab(BrowseTab.TV)
+                }
+            },
             onSearch = {
                 selectedTab = 0
                 searchOpen = true
@@ -95,7 +104,8 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         Column(Modifier.weight(1f)) {
             UpdateBanner(updateViewModel)
             when (tabs[selectedTab]) {
-                "Browse" -> BrowseScreen(browseViewModel, searchOpen) { searchOpen = it }
+                "Browse", "Movies", "TV Shows" ->
+                    BrowseScreen(browseViewModel, searchOpen) { searchOpen = it }
                 "Live" -> LiveScreen(liveViewModel)
                 "Guide" -> GuideScreen(guideViewModel)
                 "Downloads" -> DownloadsScreen(downloadsViewModel)
@@ -185,6 +195,7 @@ private fun NavRail(
                 selected = index == selected,
                 activateOnFocus = true,
                 onActivate = { onSelect(index) },
+                subdued = title == "Settings",
             )
             Spacer(Modifier.height(4.dp))
         }
@@ -229,6 +240,7 @@ private fun RailItem(
     activateOnFocus: Boolean,
     onActivate: () -> Unit,
     icon: ImageVector? = null,
+    subdued: Boolean = false,
 ) {
     Surface(
         onClick = onActivate,
@@ -236,8 +248,11 @@ private fun RailItem(
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) Color.White else Color.Transparent,
             focusedContainerColor = ArcBlue,
-            contentColor = if (selected) Color(0xFF0B0F15)
-            else MaterialTheme.colorScheme.onSurfaceVariant,
+            contentColor = when {
+                selected -> Color(0xFF0B0F15)
+                subdued -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
             focusedContentColor = MaterialTheme.colorScheme.onPrimary,
         ),
         modifier = Modifier

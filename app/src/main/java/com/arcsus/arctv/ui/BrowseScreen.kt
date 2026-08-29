@@ -261,7 +261,8 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
         contentPadding = PaddingValues(bottom = 32.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        if (heroItems.isNotEmpty()) {
+        val showHero = heroItems.isNotEmpty() && rows.isNotEmpty()
+        if (showHero) {
             item(key = "__hero") {
                 val heroArt by viewModel.heroArt.collectAsState()
                 HeroBanner(
@@ -269,15 +270,13 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
                     art = heroArt,
                     loadArt = viewModel::loadHeroArt,
                     onOpen = { viewModel.openDetails(it) },
-                    pill = { CategoryPill(viewModel) },
+                    rowTitle = rows.first().title,
+                    rowItems = rows.first().items,
+                    onMore = { tv -> viewModel.setTab(if (tv) BrowseTab.TV else BrowseTab.MOVIES) },
                 )
             }
-        } else {
-            item(key = "__pill") {
-                Box(Modifier.padding(start = 40.dp, top = 10.dp)) { CategoryPill(viewModel) }
-            }
         }
-        items(rows, key = { it.title }) { row ->
+        items(if (showHero) rows.drop(1) else rows, key = { it.title }) { row ->
             Column {
                 Text(
                     row.title,
@@ -309,11 +308,10 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
 }
 
 /**
- * Sky-style full-bleed hero: the featured title's wide backdrop runs edge to
- * edge behind the top of the page with the title overlaid, fading into the
- * background so the rows ride over it. DPAD left/right steps through the
- * trending titles (auto-cycle pauses after manual browsing); OK opens details.
- * The category pill sits over the banner's top-left corner.
+ * Sky-style full-bleed hero: the featured title's backdrop runs edge to edge
+ * with the first content row riding its fade — Sky's "Today's top picks on
+ * the artwork". The info block is its own focus target (DPAD left/right
+ * steps titles, OK opens details) so steering never hijacks the row below.
  */
 @Composable
 private fun HeroBanner(
@@ -321,7 +319,9 @@ private fun HeroBanner(
     art: Map<String, String>,
     loadArt: (CatalogItem) -> Unit,
     onOpen: (CatalogItem) -> Unit,
-    pill: @Composable () -> Unit,
+    rowTitle: String,
+    rowItems: List<CatalogItem>,
+    onMore: (Boolean) -> Unit,
 ) {
     var index by remember(items) { mutableStateOf(0) }
     var interactedAt by remember { mutableStateOf(0L) }
@@ -341,94 +341,75 @@ private fun HeroBanner(
     }
     val backdrop = art["${item.type}:${item.id}"].orEmpty().ifBlank { item.backdrop }
 
-    Surface(
-        onClick = { onOpen(item) },
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(0.dp)),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.Transparent,
-            focusedContainerColor = Color.Transparent,
-        ),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = Border(BorderStroke(2.dp, Color.White.copy(alpha = 0.4f))),
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(292.dp)
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when (event.key) {
-                    Key.DirectionLeft -> {
-                        index = (index - 1 + items.size) % items.size
-                        interactedAt = System.currentTimeMillis()
-                        true
-                    }
-                    Key.DirectionRight -> {
-                        index = (index + 1) % items.size
-                        interactedAt = System.currentTimeMillis()
-                        true
-                    }
-                    else -> false
-                }
-            },
-    ) {
-        Box(Modifier.fillMaxSize()) {
-            if (backdrop.isNotBlank()) {
-                AsyncImage(
-                    model = backdrop,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Box(
-                    Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(listOf(Color(0xFF1B2534), ArcSurface)),
-                    ),
-                )
-                AsyncImage(
-                    model = item.poster,
-                    contentDescription = item.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 56.dp)
-                        .width(150.dp)
-                        .height(225.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .border(2.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
-                )
-            }
-            // Legibility scrims: fade to the page background below, darken the
-            // left edge behind the text.
+    Box(Modifier.fillMaxWidth().height(408.dp)) {
+        if (backdrop.isNotBlank()) {
+            AsyncImage(
+                model = backdrop,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
             Box(
                 Modifier.fillMaxSize().background(
-                    Brush.verticalGradient(
-                        0f to Color.Transparent,
-                        0.55f to Color.Transparent,
-                        1f to ArcBackground,
-                    ),
+                    Brush.verticalGradient(listOf(Color(0xFF1B2534), ArcSurface)),
                 ),
             )
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.horizontalGradient(
-                        0f to ArcBackground.copy(alpha = 0.86f),
-                        0.45f to Color.Transparent,
-                    ),
+        }
+        // Legibility scrims: fade into the page below the info block so the
+        // overlaid row reads cleanly; darken the left edge behind the text.
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    0f to Color.Transparent,
+                    0.32f to Color.Transparent,
+                    0.62f to ArcBackground.copy(alpha = 0.86f),
+                    1f to ArcBackground,
                 ),
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.align(Alignment.TopStart).padding(start = 40.dp, top = 16.dp),
-            ) {
-                pill()
-            }
-            Column(
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 40.dp, end = 40.dp, bottom = 18.dp),
-            ) {
+            ),
+        )
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.horizontalGradient(
+                    0f to ArcBackground.copy(alpha = 0.8f),
+                    0.5f to Color.Transparent,
+                ),
+            ),
+        )
+
+        Surface(
+            onClick = { onOpen(item) },
+            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(0.dp)),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+            ),
+            border = ClickableSurfaceDefaults.border(
+                focusedBorder = Border(BorderStroke(2.dp, Color.White.copy(alpha = 0.4f))),
+            ),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .fillMaxWidth()
+                .height(212.dp)
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.DirectionLeft -> {
+                            index = (index - 1 + items.size) % items.size
+                            interactedAt = System.currentTimeMillis()
+                            true
+                        }
+                        Key.DirectionRight -> {
+                            index = (index + 1) % items.size
+                            interactedAt = System.currentTimeMillis()
+                            true
+                        }
+                        else -> false
+                    }
+                },
+        ) {
+            Column(Modifier.padding(start = 40.dp, top = 18.dp, end = 40.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "TRENDING",
@@ -454,7 +435,7 @@ private fun HeroBanner(
                     color = Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(0.7f),
+                    modifier = Modifier.fillMaxWidth(0.62f),
                 )
                 if (item.year.isNotBlank()) {
                     Spacer(Modifier.height(4.dp))
@@ -472,47 +453,33 @@ private fun HeroBanner(
                         color = Color.White.copy(alpha = 0.82f),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth(0.55f),
+                        modifier = Modifier.fillMaxWidth(0.5f),
                     )
                 }
             }
         }
-    }
-}
 
-private fun categoryLabel(tab: BrowseTab): String = when (tab) {
-    BrowseTab.HOME -> "Home"
-    BrowseTab.MOVIES -> "Movies"
-    BrowseTab.TV -> "TV Shows"
-}
-
-/**
- * Slim category line: one dropdown pill for Home/Movies/TV Shows, joined by
- * sort and genre chips only while browsing the full catalogue.
- */
-/** The "Home ▾" pill plus its category menu — usable on its own over the hero. */
-@Composable
-private fun CategoryPill(viewModel: BrowseViewModel) {
-    val state by viewModel.state.collectAsState()
-    var menu by remember { mutableStateOf(false) }
-    ArcChip(
-        label = "${categoryLabel(state.tab)}  ▾",
-        selected = true,
-        onClick = { menu = true },
-    )
-    if (menu) {
-        SheetDialog("Browse", onDismiss = { menu = false }) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                BrowseTab.entries.forEach { tab ->
-                    RowCard(
-                        lead = if (state.tab == tab) "●" else "",
-                        title = categoryLabel(tab),
-                        trailing = "",
-                        onClick = {
-                            viewModel.setTab(tab)
-                            menu = false
-                        },
-                    )
+        // The first content row rides the artwork's fade, Sky-style.
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(bottom = 4.dp)) {
+            Text(
+                rowTitle,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 40.dp),
+            )
+            Spacer(Modifier.height(8.dp))
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(horizontal = 40.dp),
+            ) {
+                items(rowItems, key = { it.type + it.id }) { rowItem ->
+                    WideTile(rowItem, Modifier.width(222.dp)) { onOpen(rowItem) }
+                }
+                val moreType = rowItems.firstOrNull()?.type
+                if (moreType != null && !rowTitle.startsWith("\u2665")) {
+                    item(key = "__more") {
+                        MoreTile(tv = moreType == "tv") { onMore(moreType == "tv") }
+                    }
                 }
             }
         }
@@ -524,24 +491,12 @@ private fun CategoryBar(viewModel: BrowseViewModel) {
     val state by viewModel.state.collectAsState()
     Column(Modifier.padding(bottom = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CategoryPill(viewModel)
-            if (state.tab != BrowseTab.HOME) {
-                Spacer(Modifier.width(18.dp))
-                // Divider keeps the category pill visually apart from filters.
-                Box(
-                    Modifier
-                        .width(1.dp)
-                        .height(22.dp)
-                        .background(Color.White.copy(alpha = 0.14f)),
-                )
-                Spacer(Modifier.width(18.dp))
-                SortMode.entries.forEach { mode ->
-                    TextChip(label = mode.label, selected = state.sortMode == mode, onClick = { viewModel.setSort(mode) })
-                    Spacer(Modifier.width(6.dp))
-                }
+            SortMode.entries.forEach { mode ->
+                TextChip(label = mode.label, selected = state.sortMode == mode, onClick = { viewModel.setSort(mode) })
+                Spacer(Modifier.width(6.dp))
             }
         }
-        if (state.tab != BrowseTab.HOME && state.currentGenres.isNotEmpty()) {
+        if (state.currentGenres.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 item {
