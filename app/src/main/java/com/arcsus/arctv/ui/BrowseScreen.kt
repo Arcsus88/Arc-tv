@@ -247,7 +247,7 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
     else listOf(com.arcsus.arctv.data.CatalogRow("♥ Favourites", state.favorites)) + state.rows
     val heroItems = state.rows.firstOrNull()?.items?.take(10).orEmpty()
     LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(26.dp),
         contentPadding = PaddingValues(bottom = 32.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
@@ -259,10 +259,10 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
         items(rows, key = { it.title }) { row ->
             Column {
                 Text(row.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(10.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     items(row.items, key = { it.type + it.id }) { item ->
-                        PosterTile(item, Modifier.width(140.dp)) { viewModel.openDetails(item) }
+                        PosterTile(item, Modifier.width(150.dp)) { viewModel.openDetails(item) }
                     }
                 }
             }
@@ -285,18 +285,26 @@ private fun HeroSpotlight(items: List<CatalogItem>, onOpen: (CatalogItem) -> Uni
         }
     }
     val item = items[index]
-    Card(onClick = { onOpen(item) }, modifier = Modifier.fillMaxWidth().height(220.dp)) {
+    Card(onClick = { onOpen(item) }, modifier = Modifier.fillMaxWidth().height(212.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 16.dp),
         ) {
             Column(Modifier.weight(1f)) {
-                Text(
-                    "TRENDING",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = ArcBlue,
-                    fontWeight = FontWeight.Bold,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "TRENDING",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = ArcBlue,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "${index + 1} / ${items.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 Text(
                     item.title,
@@ -319,26 +327,21 @@ private fun HeroSpotlight(items: List<CatalogItem>, onOpen: (CatalogItem) -> Uni
                         item.overview,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 3,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth(0.9f),
+                        modifier = Modifier.fillMaxWidth(0.92f),
                     )
                 }
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "${index + 1} / ${items.size}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
-            Spacer(Modifier.width(20.dp))
+            Spacer(Modifier.width(24.dp))
+            // 2:3 exactly — a squashed hero poster reads as broken.
             AsyncImage(
                 model = item.poster,
                 contentDescription = item.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .width(126.dp)
-                    .height(188.dp)
+                    .width(120.dp)
+                    .height(180.dp)
                     .clip(RoundedCornerShape(10.dp)),
             )
         }
@@ -437,23 +440,62 @@ private fun SearchResults(results: List<CatalogItem>, searching: Boolean, viewMo
             modifier = Modifier.fillMaxSize(),
         ) {
             gridItems(results, key = { it.type + it.id }) { item ->
-                PosterTile(item, Modifier) { viewModel.openDetails(item) }
+                PosterTile(item, Modifier, showType = true) { viewModel.openDetails(item) }
             }
         }
     }
 }
 
 @Composable
-private fun PosterTile(item: CatalogItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun PosterTile(
+    item: CatalogItem,
+    modifier: Modifier = Modifier,
+    showType: Boolean = false,
+    onClick: () -> Unit,
+) {
     Card(onClick = onClick, modifier = modifier) {
-        Column {
-            Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
-                AsyncImage(
-                    model = item.poster,
-                    contentDescription = item.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
+        // Strict 2:3 poster with the title on a bottom scrim — no text block
+        // below fighting the artwork for height.
+        Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
+            AsyncImage(
+                model = item.poster,
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f)),
+                        ),
+                    ),
+            )
+            Column(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                if (item.year.isNotBlank()) {
+                    Text(
+                        item.year,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.7f),
+                    )
+                }
+            }
+            if (showType) {
                 Text(
                     if (item.isTv) "TV" else "Film",
                     style = MaterialTheme.typography.labelSmall,
@@ -462,15 +504,9 @@ private fun PosterTile(item: CatalogItem, modifier: Modifier = Modifier, onClick
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(6.dp)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(6.dp))
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
-            }
-            Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
-                Text(item.title, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (item.year.isNotBlank()) {
-                    Text(item.year, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
             }
         }
     }
