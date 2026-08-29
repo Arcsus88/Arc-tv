@@ -52,12 +52,29 @@ import java.util.Locale
 private fun formatTime(unixSeconds: Long): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(unixSeconds * 1000))
 
-private fun nowAndNext(entries: List<EpgEntry>?, nowMs: Long): Pair<EpgEntry?, EpgEntry?> {
-    if (entries.isNullOrEmpty()) return null to null
-    val nowSec = nowMs / 1000
-    val current = entries.firstOrNull { it.start <= nowSec && nowSec < it.stop }
-    val next = entries.firstOrNull { it.start >= (current?.stop ?: nowSec) }
-    return current to next
+/** One block in a channel's programme lane, clipped to the guide window. */
+private data class Lane(val start: Long, val end: Long, val title: String?, val onAir: Boolean)
+
+/** Walk a channel's listings across [windowStart, windowEnd), filling gaps. */
+private fun lanesFor(
+    entries: List<EpgEntry>?,
+    windowStart: Long,
+    windowEnd: Long,
+    nowSec: Long,
+): List<Lane> {
+    val out = mutableListOf<Lane>()
+    var cursor = windowStart
+    for (e in entries.orEmpty().sortedBy { it.start }) {
+        if (e.stop <= cursor || e.start >= windowEnd) continue
+        val s = maxOf(e.start, cursor)
+        val end = minOf(e.stop, windowEnd)
+        if (s > cursor) out.add(Lane(cursor, s, null, false))
+        out.add(Lane(s, end, e.title, e.start <= nowSec && nowSec < e.stop))
+        cursor = end
+        if (cursor >= windowEnd) break
+    }
+    if (cursor < windowEnd) out.add(Lane(cursor, windowEnd, null, false))
+    return out
 }
 
 @Composable
@@ -241,6 +258,12 @@ private fun GroupPicker(
     }
 }
 
+/** Sky-style guide: channel column on the left, a 90-minute timeline of
+ * proportionally sized programme blocks on the right, the on-air block
+ * highlighted with a progress line. Blocks are decoration — the channel cell
+ * plays, the heart favourites. */
+private const val WINDOW_SECONDS = 90L * 60L
+
 @Composable
 private fun GuideList(
     channels: List<LiveChannel>,
@@ -251,119 +274,162 @@ private fun GuideList(
     onToggleFavorite: (LiveChannel) -> Unit,
     onPlay: (LiveChannel) -> Unit,
 ) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        items(channels.size, key = { channels[it].id }) { index ->
-            val channel = channels[index]
-            val (now, next) = nowAndNext(epg[channel.url], nowMs)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-            Card(onClick = { onPlay(channel) }, modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                ) {
-                    if (channel.logo.isNotBlank()) {
-                        AsyncImage(
-                            model = channel.logo,
-                            contentDescription = null,
-                            modifier = Modifier.size(36.dp),
-                        )
-                    } else {
-                        // Lettered tile, matching the web guide's logo fallback.
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                        ) {
-                            Text(
-                                channel.name.trim()
-                                    .firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "•",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = ArcBlue,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.width(220.dp)) {
+    val nowSec = nowMs / 1000
+    val windowStart = nowSec - nowSec % 1800
+    val windowEnd = windowStart + WINDOW_SECONDS
+
+    Column {
+        // Time ruler, aligned with the programme lanes below.
+        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+            Spacer(Modifier.width(198.dp))
+            for (i in 0 until 3) {
+                Text(
+                    formatTime(windowStart + i * 1800L),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (i == 0) ArcBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (i == 0) FontWeight.Bold else FontWeight.Normal,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Spacer(Modifier.width(58.dp))
+        }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(channels.size, key = { channels[it].id }) { index ->
+                val channel = channels[index]
+                GuideRow(
+                    channel = channel,
+                    entries = epg[channel.url],
+                    epgLoading = epgLoading,
+                    nowSec = nowSec,
+                    windowStart = windowStart,
+                    windowEnd = windowEnd,
+                    favorite = channel.url in favoriteUrls,
+                    onToggleFavorite = onToggleFavorite,
+                    onPlay = onPlay,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GuideRow(
+    channel: LiveChannel,
+    entries: List<EpgEntry>?,
+    epgLoading: Boolean,
+    nowSec: Long,
+    windowStart: Long,
+    windowEnd: Long,
+    favorite: Boolean,
+    onToggleFavorite: (LiveChannel) -> Unit,
+    onPlay: (LiveChannel) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Card(onClick = { onPlay(channel) }, modifier = Modifier.width(190.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            ) {
+                if (channel.logo.isNotBlank()) {
+                    AsyncImage(
+                        model = channel.logo,
+                        contentDescription = null,
+                        modifier = Modifier.size(30.dp),
+                    )
+                } else {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                    ) {
                         Text(
-                            channel.name,
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            channel.name.trim()
+                                .firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "\u2022",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = ArcBlue,
+                            fontWeight = FontWeight.Bold,
                         )
-                        if (now != null) {
-                            Text(
-                                "● ON AIR",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = ArcBlue,
-                            )
-                        }
                     }
-                    Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        if (now != null) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    channel.name,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Row(Modifier.weight(1f).height(58.dp)) {
+            if (entries.isNullOrEmpty()) {
+                Box(
+                    contentAlignment = Alignment.CenterStart,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                ) {
+                    Text(
+                        if (epgLoading) "Loading guide\u2026" else "No guide data",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
+            } else {
+                for (lane in lanesFor(entries, windowStart, windowEnd, nowSec)) {
+                    val weight = (lane.end - lane.start).toFloat().coerceAtLeast(1f)
+                    Box(
+                        Modifier
+                            .weight(weight)
+                            .fillMaxHeight()
+                            .padding(end = 2.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                when {
+                                    lane.onAir -> ArcBlue.copy(alpha = 0.24f)
+                                    lane.title != null -> MaterialTheme.colorScheme.surfaceVariant
+                                    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                },
+                            ),
+                    ) {
+                        if (lane.title != null) {
+                            Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
                                 Text(
-                                    now.title,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
+                                    lane.title,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = if (lane.onAir) FontWeight.SemiBold else FontWeight.Normal,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f),
                                 )
-                                Spacer(Modifier.width(12.dp))
                                 Text(
-                                    "${formatTime(now.start)}–${formatTime(now.stop)}",
+                                    formatTime(lane.start),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            Spacer(Modifier.height(6.dp))
-                            val progress = if (now.stop > now.start) {
-                                ((nowMs / 1000.0 - now.start) / (now.stop - now.start))
-                                    .coerceIn(0.0, 1.0).toFloat()
-                            } else 0f
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(3.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(Color.White.copy(alpha = 0.12f)),
-                            ) {
+                            if (lane.onAir && lane.end > lane.start) {
+                                val progress = ((nowSec - lane.start).toFloat() / (lane.end - lane.start))
+                                    .coerceIn(0f, 1f)
                                 Box(
                                     Modifier
+                                        .align(Alignment.BottomStart)
                                         .fillMaxWidth(progress)
-                                        .fillMaxHeight()
+                                        .height(3.dp)
                                         .background(ArcBlue),
                                 )
                             }
-                            if (next != null) {
-                                Spacer(Modifier.height(5.dp))
-                                Text(
-                                    "${formatTime(next.start)}  ${next.title}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        } else {
-                            Text(
-                                if (epgLoading) "Loading guide…" else "No guide data for this channel",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                         }
                     }
                 }
             }
-            Spacer(Modifier.width(8.dp))
-            OutlinedButton(onClick = { onToggleFavorite(channel) }) {
-                Text(if (channel.url in favoriteUrls) "♥" else "♡", color = ArcBlue)
-            }
-            }
+        }
+        Spacer(Modifier.width(6.dp))
+        OutlinedButton(onClick = { onToggleFavorite(channel) }) {
+            Text(if (favorite) "\u2665" else "\u2661", color = ArcBlue)
         }
     }
 }

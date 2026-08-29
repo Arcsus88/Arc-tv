@@ -40,8 +40,11 @@ import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -70,6 +73,7 @@ import coil.compose.AsyncImage
 import com.arcsus.arctv.data.CatalogItem
 import com.arcsus.arctv.data.Source
 import com.arcsus.arctv.ui.theme.ArcBlue
+import com.arcsus.arctv.ui.theme.ArcSurface
 
 @Composable
 fun BrowseScreen(
@@ -294,7 +298,7 @@ private fun HeroSpotlight(items: List<CatalogItem>, onOpen: (CatalogItem) -> Uni
         onClick = { onOpen(item) },
         modifier = Modifier
             .fillMaxWidth()
-            .height(238.dp)
+            .height(240.dp)
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
@@ -312,63 +316,95 @@ private fun HeroSpotlight(items: List<CatalogItem>, onOpen: (CatalogItem) -> Uni
                 }
             },
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 16.dp),
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(listOf(Color(0xFF1B2534), ArcSurface)),
+            ),
         ) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "TRENDING",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = ArcBlue,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        "${index + 1} / ${items.size}   ‹ › to browse",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    item.title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (item.year.isNotBlank()) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        item.year + if (item.isTv) "  ·  TV" else "",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (item.overview.isNotBlank()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxSize().padding(start = 32.dp, end = 24.dp, top = 14.dp, bottom = 14.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "TRENDING",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = ArcBlue,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .background(ArcBlue.copy(alpha = 0.16f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            "${index + 1} / ${items.size}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        item.overview,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
+                        item.title,
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth(0.92f),
+                    )
+                    if (item.year.isNotBlank()) {
+                        Spacer(Modifier.height(5.dp))
+                        Text(
+                            item.year + (if (item.isTv) "  ·  Series" else "  ·  Film"),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = ArcBlue,
+                        )
+                    }
+                    if (item.overview.isNotBlank()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            item.overview,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth(0.9f),
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "‹ ›  browse   ·   OK for details",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                     )
                 }
-            }
-            Spacer(Modifier.width(20.dp))
-            // The mobile app's fan: neighbours peek dimmed behind the featured
-            // poster. Same URLs as the trending row, so Coil serves them from
-            // memory instead of decoding fresh bitmaps each cycle.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                HeroPoster(items[(index - 1 + items.size) % items.size], 88.dp, 132.dp, dim = true)
-                Spacer(Modifier.width(10.dp))
-                HeroPoster(item, 136.dp, 204.dp, dim = false)
-                Spacer(Modifier.width(10.dp))
-                HeroPoster(items[(index + 1) % items.size], 88.dp, 132.dp, dim = true)
+                Spacer(Modifier.width(12.dp))
+                // The mobile app's fan, properly staged: neighbours tucked
+                // behind the featured poster, tilted outwards and dimmed; the
+                // featured one framed with a light keyline. Same poster URLs as
+                // the trending row, so everything comes from Coil's cache.
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.width(304.dp).fillMaxHeight(),
+                ) {
+                    HeroPoster(
+                        items[(index - 1 + items.size) % items.size], 104.dp, 156.dp, dim = true,
+                        modifier = Modifier
+                            .offset(x = (-86).dp)
+                            .graphicsLayer { rotationZ = -8f },
+                    )
+                    HeroPoster(
+                        items[(index + 1) % items.size], 104.dp, 156.dp, dim = true,
+                        modifier = Modifier
+                            .offset(x = 86.dp)
+                            .graphicsLayer { rotationZ = 8f },
+                    )
+                    HeroPoster(
+                        item, 138.dp, 206.dp, dim = false,
+                        modifier = Modifier.border(
+                            2.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(12.dp),
+                        ),
+                    )
+                }
             }
         }
     }
@@ -380,16 +416,17 @@ private fun HeroPoster(
     width: androidx.compose.ui.unit.Dp,
     height: androidx.compose.ui.unit.Dp,
     dim: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     AsyncImage(
         model = item.poster,
         contentDescription = item.title,
         contentScale = ContentScale.Crop,
-        alpha = if (dim) 0.4f else 1f,
-        modifier = Modifier
+        alpha = if (dim) 0.35f else 1f,
+        modifier = modifier
             .width(width)
             .height(height)
-            .clip(RoundedCornerShape(10.dp)),
+            .clip(RoundedCornerShape(12.dp)),
     )
 }
 
@@ -408,28 +445,36 @@ private fun CategoryBar(viewModel: BrowseViewModel) {
     val state by viewModel.state.collectAsState()
     var menu by remember { mutableStateOf(false) }
     Column(Modifier.padding(bottom = 12.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             ArcChip(
                 label = "${categoryLabel(state.tab)}  ▾",
                 selected = true,
                 onClick = { menu = true },
             )
             if (state.tab != BrowseTab.HOME) {
-                Spacer(Modifier.width(16.dp))
+                Spacer(Modifier.width(18.dp))
+                // Divider keeps the category pill visually apart from filters.
+                Box(
+                    Modifier
+                        .width(1.dp)
+                        .height(22.dp)
+                        .background(Color.White.copy(alpha = 0.14f)),
+                )
+                Spacer(Modifier.width(18.dp))
                 SortMode.entries.forEach { mode ->
-                    ArcChip(label = mode.label, selected = state.sortMode == mode, onClick = { viewModel.setSort(mode) })
-                    Spacer(Modifier.width(8.dp))
+                    TextChip(label = mode.label, selected = state.sortMode == mode, onClick = { viewModel.setSort(mode) })
+                    Spacer(Modifier.width(6.dp))
                 }
             }
         }
         if (state.tab != BrowseTab.HOME && state.currentGenres.isNotEmpty()) {
-            Spacer(Modifier.height(10.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(8.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 item {
-                    ArcChip(label = "All", selected = state.genreId == null, onClick = { viewModel.setGenre(null) })
+                    TextChip(label = "All", selected = state.genreId == null, onClick = { viewModel.setGenre(null) })
                 }
                 items(state.currentGenres, key = { it.id }) { genre ->
-                    ArcChip(label = genre.name, selected = state.genreId == genre.id, onClick = { viewModel.setGenre(genre.id) })
+                    TextChip(label = genre.name, selected = state.genreId == genre.id, onClick = { viewModel.setGenre(genre.id) })
                 }
             }
         }
