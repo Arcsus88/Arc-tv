@@ -291,7 +291,7 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
                     contentPadding = PaddingValues(horizontal = 40.dp),
                 ) {
                     items(row.items, key = { it.type + it.id }) { item ->
-                        PosterTile(item, Modifier.width(150.dp)) { viewModel.openDetails(item) }
+                        WideTile(item, Modifier.width(222.dp)) { viewModel.openDetails(item) }
                     }
                     // Sky's "More Top Picks" closer: jumps to the full catalogue.
                     val moreType = row.items.firstOrNull()?.type
@@ -339,7 +339,7 @@ private fun HeroBanner(
         loadArt(item)
         loadArt(items[(index + 1) % items.size])
     }
-    val backdrop = art["${item.type}:${item.id}"].orEmpty()
+    val backdrop = art["${item.type}:${item.id}"].orEmpty().ifBlank { item.backdrop }
 
     Surface(
         onClick = { onOpen(item) },
@@ -615,15 +615,15 @@ private fun DiscoverGrid(viewModel: BrowseViewModel) {
             Column(Modifier.fillMaxSize()) {
                 FocusDetailHeader(focusedItem)
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(7),
+                    columns = GridCells.Fixed(4),
                     state = gridState,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                     contentPadding = PaddingValues(bottom = 32.dp, top = 4.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     gridItems(state.discoverItems, key = { it.type + it.id }) { item ->
-                        PosterTile(item, Modifier, onFocus = { focusedItem = it }) {
+                        WideTile(item, Modifier, onFocus = { focusedItem = it }) {
                             viewModel.openDetails(item)
                         }
                     }
@@ -684,14 +684,14 @@ private fun SearchResults(results: List<CatalogItem>, searching: Boolean, viewMo
         searching && results.isEmpty() -> CenteredMessage("Searching…")
         results.isEmpty() -> CenteredMessage("No results.")
         else -> LazyVerticalGrid(
-            columns = GridCells.Fixed(6),
+            columns = GridCells.Fixed(4),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(bottom = 32.dp, top = 4.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
             gridItems(results, key = { it.type + it.id }) { item ->
-                PosterTile(item, Modifier, showType = true) { viewModel.openDetails(item) }
+                WideTile(item, Modifier, showType = true) { viewModel.openDetails(item) }
             }
         }
     }
@@ -700,12 +700,12 @@ private fun SearchResults(results: List<CatalogItem>, searching: Boolean, viewMo
 /** Row closer in the style of Sky's "More Top Picks" tile. */
 @Composable
 private fun MoreTile(tv: Boolean, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.width(150.dp)) {
+    Card(onClick = onClick, modifier = Modifier.width(222.dp)) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(2f / 3f)
+                .aspectRatio(16f / 9f)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -728,75 +728,65 @@ private fun MoreTile(tv: Boolean, onClick: () -> Unit) {
     }
 }
 
+/**
+ * Sky's content tile: wide 16:9 artwork with the title in plain text below.
+ * Falls back to a centre crop of the poster when no wide art exists.
+ */
 @Composable
-private fun PosterTile(
+private fun WideTile(
     item: CatalogItem,
     modifier: Modifier = Modifier,
     showType: Boolean = false,
     onFocus: ((CatalogItem) -> Unit)? = null,
     onClick: () -> Unit,
 ) {
-    Card(
-        onClick = onClick,
-        modifier = modifier.let { m ->
-            if (onFocus == null) m
-            else m.onFocusChanged { if (it.isFocused) onFocus(item) }
-        },
-    ) {
-        // Strict 2:3 poster with the title on a bottom scrim — no text block
-        // below fighting the artwork for height.
-        Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
-            AsyncImage(
-                model = item.poster,
-                contentDescription = item.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-            Box(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(64.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f)),
-                        ),
-                    ),
-            )
-            Column(
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-            ) {
-                Text(
-                    item.title,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+    Column(modifier) {
+        Card(
+            onClick = onClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .let { m ->
+                    if (onFocus == null) m
+                    else m.onFocusChanged { if (it.isFocused) onFocus(item) }
+                },
+        ) {
+            Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
+                AsyncImage(
+                    model = item.backdrop.ifBlank { item.poster },
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
                 )
-                if (item.year.isNotBlank()) {
+                if (showType) {
                     Text(
-                        item.year,
+                        if (item.isTv) "TV" else "Film",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = ArcBlue,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(6.dp)
+                            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 1.dp),
                     )
                 }
             }
-            if (showType) {
-                Text(
-                    if (item.isTv) "TV" else "Film",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ArcBlue,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp)
-                        .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                )
-            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            item.title,
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 2.dp),
+        )
+        if (item.year.isNotBlank()) {
+            Text(
+                item.year,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 2.dp),
+            )
         }
     }
 }

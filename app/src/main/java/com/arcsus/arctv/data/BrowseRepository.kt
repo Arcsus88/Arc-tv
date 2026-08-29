@@ -23,6 +23,8 @@ data class CatalogItem(
     val title: String = "",
     val year: String = "",
     val poster: String = "",
+    /** Wide 16:9 artwork (w780) — the Sky-style tile art; may be blank. */
+    val backdrop: String = "",
     val overview: String = "",
 ) {
     val isTv: Boolean get() = type == "tv"
