@@ -288,7 +288,7 @@ private fun ProgrammeDetail(info: FocusedProgramme?, nowSec: Long) {
     Column(Modifier.fillMaxWidth().padding(bottom = 12.dp).heightIn(min = 92.dp)) {
         if (info == null) {
             Text(
-                "Move around the grid — programme details appear here. OK plays the channel.",
+                "Move around the grid — details appear here. OK plays a channel; long-press OK favourites it.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -367,7 +367,6 @@ private fun GuideList(
                     modifier = Modifier.weight(1f),
                 )
             }
-            Spacer(Modifier.width(58.dp))
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(channels.size, key = { channels[it].id }) { index ->
@@ -403,7 +402,11 @@ private fun GuideRow(
     onPlay: (LiveChannel) -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Card(onClick = { onPlay(channel) }, modifier = Modifier.width(190.dp)) {
+        Card(
+            onClick = { onPlay(channel) },
+            onLongClick = { onToggleFavorite(channel) },
+            modifier = Modifier.width(190.dp),
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
@@ -437,7 +440,12 @@ private fun GuideRow(
                     style = MaterialTheme.typography.labelLarge,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
+                if (favorite) {
+                    Spacer(Modifier.width(4.dp))
+                    Text("\u2665", color = ArcBlue, style = MaterialTheme.typography.labelMedium)
+                }
             }
         }
         Spacer(Modifier.width(8.dp))
@@ -528,10 +536,6 @@ private fun GuideRow(
                     }
                 }
             }
-        }
-        Spacer(Modifier.width(6.dp))
-        OutlinedButton(onClick = { onToggleFavorite(channel) }) {
-            Text(if (favorite) "\u2665" else "\u2661", color = ArcBlue)
         }
     }
 }

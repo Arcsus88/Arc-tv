@@ -104,6 +104,40 @@ fun hasPlaybackInfo(data: Intent?): Boolean {
         data.hasExtra("duration") || data.hasExtra("extra_duration")
 }
 
+/** The app that will handle a plain video ACTION_VIEW for [url], if known. */
+fun resolvePlayerLabel(context: Context, url: String): String? {
+    val intent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(Uri.parse(url), "video/*") }
+    val info = context.packageManager.resolveActivity(intent, 0) ?: return null
+    val label = info.loadLabel(context.packageManager)?.toString()
+    return label?.takeUnless { it.isBlank() || it.equals("Android System", ignoreCase = true) }
+}
+
+/**
+ * Ask the stream's server for its first bytes, to separate "the link is dead
+ * or refused from this device" from "the player cannot decode the file".
+ * Blocking — call from a background dispatcher.
+ */
+fun probeStream(url: String): String = try {
+    val client = okhttp3.OkHttpClient.Builder()
+        .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+    val request = okhttp3.Request.Builder().url(url).header("Range", "bytes=0-1").build()
+    client.newCall(request).execute().use { response ->
+        when {
+            response.isSuccessful ->
+                "Link check: HTTP ${response.code} — the link serves data, so the player " +
+                    "likely can't decode this file. Try another source, or a different player app."
+            response.code == 403 ->
+                "Link check: HTTP 403 — the server refused this device (VPN or IP block?)."
+            else ->
+                "Link check: HTTP ${response.code} — the link isn't serving. Try another source."
+        }
+    }
+} catch (e: Exception) {
+    "Link check failed: ${e.message ?: "network error"} — the link isn't reachable from this device."
+}
+
 fun copyToClipboard(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText("Arc TV link", text))

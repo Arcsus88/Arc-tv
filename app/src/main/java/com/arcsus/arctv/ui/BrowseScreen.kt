@@ -183,6 +183,13 @@ fun BrowseScreen(
 
     quickExit?.let { stream ->
         val host = runCatching { java.net.URI(stream.streamUrl).host }.getOrNull() ?: "unknown host"
+        val playerLabel = remember(stream) { resolvePlayerLabel(context, stream.streamUrl) }
+        var probe by remember(stream) { mutableStateOf("Checking the link…") }
+        LaunchedEffect(stream) {
+            probe = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                probeStream(stream.streamUrl)
+            }
+        }
         SheetDialog("That didn't play", onDismiss = { quickExit = null }) {
             Text(
                 stream.filename.ifBlank { "(no filename)" },
@@ -192,15 +199,20 @@ fun BrowseScreen(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "from $host",
+                "from $host" + (playerLabel?.let { "   ·   player: $it" } ?: ""),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
             Text(
-                "The player closed within seconds of starting — the link probably isn't " +
-                    "reachable from this device, or the file format defeated the player. " +
-                    "Try again, or pick a different source.",
+                probe,
+                style = MaterialTheme.typography.bodySmall,
+                color = ArcBlue,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "The player closed within seconds of starting. Try again, or pick a " +
+                    "different source from the list.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

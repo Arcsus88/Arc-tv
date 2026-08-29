@@ -104,7 +104,13 @@ fun LiveScreen(viewModel: LiveViewModel) {
             placeholder = "Search channels…",
             modifier = Modifier.fillMaxWidth(0.5f),
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "OK plays a channel  ·  long-press OK to favourite it",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(10.dp))
 
         val error = state.error
         when {
@@ -218,46 +224,50 @@ private fun ChannelGrid(
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         items(channels.take(visible), key = { it.id }) { channel ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Card(onClick = { onPlay(channel) }, modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(12.dp),
-                    ) {
-                        if (channel.logo.isNotBlank()) {
-                            AsyncImage(
-                                model = channel.logo,
-                                contentDescription = null,
-                                modifier = Modifier.size(32.dp),
-                            )
-                        } else {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                            ) {
-                                Text(
-                                    channel.name.trim()
-                                        .firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "•",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = ArcBlue,
-                                )
-                            }
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            channel.name,
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
+            // One clean focus target per channel: OK plays, long-press OK
+            // toggles the favourite (shown as a small heart on the card).
+            Card(
+                onClick = { onPlay(channel) },
+                onLongClick = { onToggleFavorite(channel) },
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(12.dp),
+                ) {
+                    if (channel.logo.isNotBlank()) {
+                        AsyncImage(
+                            model = channel.logo,
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
                         )
+                    } else {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                        ) {
+                            Text(
+                                channel.name.trim()
+                                    .firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "•",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = ArcBlue,
+                            )
+                        }
                     }
-                }
-                Spacer(Modifier.width(6.dp))
-                OutlinedButton(onClick = { onToggleFavorite(channel) }) {
-                    Text(if (channel.url in favoriteUrls) "♥" else "♡")
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        channel.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (channel.url in favoriteUrls) {
+                        Spacer(Modifier.width(6.dp))
+                        Text("♥", color = ArcBlue, style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
         }
