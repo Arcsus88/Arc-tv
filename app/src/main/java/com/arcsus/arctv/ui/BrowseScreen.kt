@@ -45,6 +45,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -64,7 +69,6 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.arcsus.arctv.data.CatalogItem
 import com.arcsus.arctv.data.Source
-import com.arcsus.arctv.ui.theme.ArcBackground
 import com.arcsus.arctv.ui.theme.ArcBlue
 
 @Composable
@@ -254,13 +258,7 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
     ) {
         if (heroItems.isNotEmpty()) {
             item(key = "__hero") {
-                val heroArt by viewModel.heroArt.collectAsState()
-                HeroSpotlight(
-                    items = heroItems,
-                    art = heroArt,
-                    loadArt = viewModel::loadHeroArt,
-                    onOpen = { viewModel.openDetails(it) },
-                )
+                HeroSpotlight(heroItems) { viewModel.openDetails(it) }
             }
         }
         items(rows, key = { it.title }) { row ->
@@ -278,65 +276,47 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
 }
 
 /**
- * The trending hero: a billboard card cycling through the top titles. Uses the
- * title's wide backdrop when known (poster as fallback), with a single flat
- * scrim for text legibility — one image + one gradient, kept cheap for budget
- * TV GPUs.
+ * The trending hero, mobile-style: a fanned poster carousel the remote can
+ * steer — DPAD left/right steps through titles (pausing the auto-cycle for a
+ * bit), OK opens the featured title. Kept cheap for budget TV GPUs: flat
+ * surfaces, no gradient overlay, and the fan reuses the exact poster URLs the
+ * row below has already cached.
  */
 @Composable
-private fun HeroSpotlight(
-    items: List<CatalogItem>,
-    art: Map<String, String>,
-    loadArt: (CatalogItem) -> Unit,
-    onOpen: (CatalogItem) -> Unit,
-) {
+private fun HeroSpotlight(items: List<CatalogItem>, onOpen: (CatalogItem) -> Unit) {
     var index by remember(items) { mutableStateOf(0) }
+    var interactedAt by remember { mutableStateOf(0L) }
     LaunchedEffect(items) {
         while (true) {
             delay(12_000)
-            index = (index + 1) % items.size
+            if (System.currentTimeMillis() - interactedAt > 20_000) {
+                index = (index + 1) % items.size
+            }
         }
     }
     val item = items[index]
-    // Warm the featured and next backdrops so cycling never pops in late art.
-    LaunchedEffect(item) {
-        loadArt(item)
-        loadArt(items[(index + 1) % items.size])
-    }
-    val backdrop = art["${item.type}:${item.id}"].orEmpty()
-    Card(onClick = { onOpen(item) }, modifier = Modifier.fillMaxWidth().height(238.dp)) {
-        Box(Modifier.fillMaxSize()) {
-            if (backdrop.isNotBlank()) {
-                AsyncImage(
-                    model = backdrop,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                Box(
-                    Modifier.fillMaxSize().background(
-                        Brush.horizontalGradient(
-                            listOf(
-                                ArcBackground.copy(alpha = 0.96f),
-                                ArcBackground.copy(alpha = 0.72f),
-                                Color.Transparent,
-                            ),
-                        ),
-                    ),
-                )
-            }
-            HeroContent(item, index, items, showPoster = backdrop.isBlank())
-        }
-    }
-}
-
-@Composable
-private fun HeroContent(
-    item: CatalogItem,
-    index: Int,
-    items: List<CatalogItem>,
-    showPoster: Boolean,
-) {
+    Card(
+        onClick = { onOpen(item) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(238.dp)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> {
+                        index = (index - 1 + items.size) % items.size
+                        interactedAt = System.currentTimeMillis()
+                        true
+                    }
+                    Key.DirectionRight -> {
+                        index = (index + 1) % items.size
+                        interactedAt = System.currentTimeMillis()
+                        true
+                    }
+                    else -> false
+                }
+            },
+    ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 16.dp),
@@ -351,7 +331,7 @@ private fun HeroContent(
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        "${index + 1} / ${items.size}",
+                        "${index + 1} / ${items.size}   ‹ › to browse",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -384,20 +364,38 @@ private fun HeroContent(
                     )
                 }
             }
-            if (showPoster) {
-                Spacer(Modifier.width(24.dp))
-                // 2:3 exactly — a squashed hero poster reads as broken.
-                AsyncImage(
-                    model = item.poster,
-                    contentDescription = item.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .width(120.dp)
-                        .height(180.dp)
-                        .clip(RoundedCornerShape(10.dp)),
-                )
+            Spacer(Modifier.width(20.dp))
+            // The mobile app's fan: neighbours peek dimmed behind the featured
+            // poster. Same URLs as the trending row, so Coil serves them from
+            // memory instead of decoding fresh bitmaps each cycle.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                HeroPoster(items[(index - 1 + items.size) % items.size], 88.dp, 132.dp, dim = true)
+                Spacer(Modifier.width(10.dp))
+                HeroPoster(item, 136.dp, 204.dp, dim = false)
+                Spacer(Modifier.width(10.dp))
+                HeroPoster(items[(index + 1) % items.size], 88.dp, 132.dp, dim = true)
             }
         }
+    }
+}
+
+@Composable
+private fun HeroPoster(
+    item: CatalogItem,
+    width: androidx.compose.ui.unit.Dp,
+    height: androidx.compose.ui.unit.Dp,
+    dim: Boolean,
+) {
+    AsyncImage(
+        model = item.poster,
+        contentDescription = item.title,
+        contentScale = ContentScale.Crop,
+        alpha = if (dim) 0.4f else 1f,
+        modifier = Modifier
+            .width(width)
+            .height(height)
+            .clip(RoundedCornerShape(10.dp)),
+    )
 }
 
 @Composable

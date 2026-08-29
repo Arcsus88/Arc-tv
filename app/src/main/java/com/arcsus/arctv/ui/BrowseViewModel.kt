@@ -98,23 +98,6 @@ class BrowseViewModel(
     val detail: StateFlow<DetailUi?> = _detail
     private val detailsCache = mutableMapOf<String, TitleDetails>()
 
-    /** Backdrop URLs for the trending hero, keyed "type:id" ("" = none found). */
-    private val _heroArt = MutableStateFlow<Map<String, String>>(emptyMap())
-    val heroArt: StateFlow<Map<String, String>> = _heroArt
-
-    /** Fetch the wide backdrop for a hero item once (shares the details cache). */
-    fun loadHeroArt(item: CatalogItem) {
-        val key = "${item.type}:${item.id}"
-        if (_heroArt.value.containsKey(key)) return
-        _heroArt.value = _heroArt.value + (key to "")
-        viewModelScope.launch {
-            val d = detailsCache[key] ?: runCatching { repository.details(item) }.getOrNull()
-                ?.also { detailsCache[key] = it }
-            val backdrop = d?.backdrop.orEmpty()
-            if (backdrop.isNotBlank()) _heroArt.value = _heroArt.value + (key to backdrop)
-        }
-    }
-
     private val _playRequest = MutableStateFlow<ResolvedStream?>(null)
     val playRequest: StateFlow<ResolvedStream?> = _playRequest
 
