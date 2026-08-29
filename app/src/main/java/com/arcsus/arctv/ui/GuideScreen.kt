@@ -1,8 +1,8 @@
 package com.arcsus.arctv.ui
 
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,8 +21,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,15 +39,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import androidx.tv.material3.Button
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import coil.compose.AsyncImage
 import com.arcsus.arctv.data.EpgEntry
 import com.arcsus.arctv.data.LiveChannel
 import com.arcsus.arctv.ui.theme.ArcBlue
@@ -91,6 +89,9 @@ private fun lanesFor(
     if (cursor < windowEnd) out.add(Lane(cursor, windowEnd, null, false))
     return out
 }
+
+private const val WINDOW_SECONDS = 90L * 60L
+private val CHANNEL_COL = 176.dp
 
 @Composable
 fun GuideScreen(viewModel: GuideViewModel) {
@@ -138,80 +139,115 @@ fun GuideScreen(viewModel: GuideViewModel) {
                 val current = viewModel.currentGroup(state)
                 val showPicker = picking || validSelected.isEmpty()
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                ) {
-                    validSelected.forEach { name ->
-                        ArcChip(
-                            label = name.ifBlank { "Ungrouped" },
-                            selected = name == current && !showPicker,
-                            onClick = { viewModel.selectGroup(name) },
-                        )
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    ArcChip(
-                        label = if (showPicker) "Close picker" else "+ Add group",
-                        selected = showPicker,
-                        onClick = { picking = !picking },
-                    )
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        formatTime(state.nowMs / 1000),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-
-                if (showPicker) {
-                    GroupPicker(
-                        state = state,
-                        validSelected = validSelected,
-                        search = search,
-                        onSearchChange = { search = it },
-                        onAdd = {
-                            viewModel.addGroup(it)
-                            picking = false
-                            search = ""
-                        },
-                        onRemove = { viewModel.removeGroup(it) },
-                    )
-                } else if (current != null) {
-                    if (!state.epgCapable) {
+                // Sky's guide layout: the group list runs down the left like a
+                // sub-menu, with the grid filling the rest.
+                Row(Modifier.fillMaxSize()) {
+                    Column(
+                        Modifier
+                            .width(CHANNEL_COL)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState())
+                            .padding(end = 4.dp),
+                    ) {
                         Text(
-                            "This playlist has no programme data — guides need an Xtream login (or a get.php link).",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            "TV Guide",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
                         )
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    val groupChannels = viewModel.channelsFor(state, current)
-                    if (groupChannels.isEmpty()) {
-                        Text(
-                            if (state.epgLoading) "Loading channels…" else "No channels in this group.",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        var focusedProgramme by remember(current) {
-                            mutableStateOf<FocusedProgramme?>(null)
+                        Spacer(Modifier.height(12.dp))
+                        validSelected.forEach { name ->
+                            GuideGroupItem(
+                                label = name.ifBlank { "Ungrouped" },
+                                selected = name == current && !showPicker,
+                                onActivate = { viewModel.selectGroup(name) },
+                            )
+                            Spacer(Modifier.height(3.dp))
                         }
-                        ProgrammeDetail(focusedProgramme, state.nowMs / 1000)
-                        GuideList(
-                            channels = groupChannels,
-                            epg = state.epg,
-                            epgLoading = state.epgLoading,
-                            nowMs = state.nowMs,
-                            favoriteUrls = state.favChannels.mapTo(HashSet()) { it.url },
-                            onToggleFavorite = { viewModel.toggleFavorite(it) },
-                            onProgrammeFocus = { focusedProgramme = it },
-                            onPlay = play,
+                        Spacer(Modifier.height(6.dp))
+                        GuideGroupItem(
+                            label = if (showPicker) "Close picker" else "+ Add group",
+                            selected = showPicker,
+                            onActivate = { picking = !picking },
                         )
+                    }
+                    Spacer(Modifier.width(22.dp))
+                    Column(Modifier.weight(1f)) {
+                        if (showPicker) {
+                            GroupPicker(
+                                state = state,
+                                validSelected = validSelected,
+                                search = search,
+                                onSearchChange = { search = it },
+                                onAdd = {
+                                    viewModel.addGroup(it)
+                                    picking = false
+                                    search = ""
+                                },
+                                onRemove = { viewModel.removeGroup(it) },
+                            )
+                        } else if (current != null) {
+                            if (!state.epgCapable) {
+                                Text(
+                                    "This playlist has no programme data — guides need an Xtream login (or a get.php link).",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                            }
+                            val groupChannels = viewModel.channelsFor(state, current)
+                            if (groupChannels.isEmpty()) {
+                                Text(
+                                    if (state.epgLoading) "Loading channels…" else "No channels in this group.",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                var focusedProgramme by remember(current) {
+                                    mutableStateOf<FocusedProgramme?>(null)
+                                }
+                                ProgrammeDetail(focusedProgramme, state.nowMs / 1000)
+                                GuideList(
+                                    channels = groupChannels,
+                                    epg = state.epg,
+                                    epgLoading = state.epgLoading,
+                                    nowMs = state.nowMs,
+                                    favoriteUrls = state.favChannels.mapTo(HashSet()) { it.url },
+                                    onToggleFavorite = { viewModel.toggleFavorite(it) },
+                                    onProgrammeFocus = { focusedProgramme = it },
+                                    onPlay = play,
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+/** A group entry in the guide's left menu: Sky's white box marks the active one. */
+@Composable
+private fun GuideGroupItem(label: String, selected: Boolean, onActivate: () -> Unit) {
+    Surface(
+        onClick = onActivate,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) Color.White else Color.Transparent,
+            focusedContainerColor = ArcBlue,
+            contentColor = if (selected) Color(0xFF0B0F15)
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+        )
     }
 }
 
@@ -280,12 +316,11 @@ private fun GroupPicker(
 
 /**
  * Sky's detail header: whichever programme the grid focus rests on is
- * described up here — channel, title, times, and the synopsis the guide
- * data already carries.
+ * described up here — channel, title, times, and the synopsis.
  */
 @Composable
 private fun ProgrammeDetail(info: FocusedProgramme?, nowSec: Long) {
-    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp).heightIn(min = 92.dp)) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 10.dp).heightIn(min = 88.dp)) {
         if (info == null) {
             Text(
                 "Move around the grid — details appear here. OK plays a channel; long-press OK favourites it.",
@@ -333,12 +368,11 @@ private fun ProgrammeDetail(info: FocusedProgramme?, nowSec: Long) {
     }
 }
 
-/** Sky-style guide: channel column on the left, a 90-minute timeline of
- * proportionally sized programme blocks on the right, the on-air block
- * highlighted with a progress line. Blocks are decoration — the channel cell
- * plays, the heart favourites. */
-private const val WINDOW_SECONDS = 90L * 60L
-
+/**
+ * Sky's programme grid: a Today/time ruler, compact hairline-separated rows,
+ * and flat title-only cells sized by duration. Cells are focus targets that
+ * feed the detail header; OK plays the channel, long-press OK favourites it.
+ */
 @Composable
 private fun GuideList(
     channels: List<LiveChannel>,
@@ -355,20 +389,28 @@ private fun GuideList(
     val windowEnd = windowStart + WINDOW_SECONDS
 
     Column {
-        // Time ruler, aligned with the programme lanes below.
-        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
-            Spacer(Modifier.width(198.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 5.dp),
+        ) {
+            Text(
+                "Today",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.width(CHANNEL_COL),
+            )
             for (i in 0 until 3) {
                 Text(
                     formatTime(windowStart + i * 1800L),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelLarge,
                     color = if (i == 0) ArcBlue else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = if (i == 0) FontWeight.Bold else FontWeight.Normal,
                     modifier = Modifier.weight(1f),
                 )
             }
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.12f)))
+        LazyColumn {
             items(channels.size, key = { channels[it].id }) { index ->
                 val channel = channels[index]
                 GuideRow(
@@ -401,141 +443,143 @@ private fun GuideRow(
     onProgrammeFocus: (FocusedProgramme) -> Unit,
     onPlay: (LiveChannel) -> Unit,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Card(
-            onClick = { onPlay(channel) },
-            onLongClick = { onToggleFavorite(channel) },
-            modifier = Modifier.width(190.dp),
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.height(44.dp).padding(vertical = 2.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            Card(
+                onClick = { onPlay(channel) },
+                onLongClick = { onToggleFavorite(channel) },
+                modifier = Modifier.width(CHANNEL_COL - 6.dp).fillMaxHeight(),
             ) {
-                if (channel.logo.isNotBlank()) {
-                    AsyncImage(
-                        model = channel.logo,
-                        contentDescription = null,
-                        modifier = Modifier.size(30.dp),
-                    )
-                } else {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(30.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                    ) {
-                        Text(
-                            channel.name.trim()
-                                .firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "\u2022",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = ArcBlue,
-                            fontWeight = FontWeight.Bold,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                ) {
+                    if (channel.logo.isNotBlank()) {
+                        AsyncImage(
+                            model = channel.logo,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
                         )
+                    } else {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                        ) {
+                            Text(
+                                channel.name.trim()
+                                    .firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "•",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ArcBlue,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(7.dp))
+                    Text(
+                        channel.name,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (favorite) {
+                        Spacer(Modifier.width(4.dp))
+                        Text("♥", color = ArcBlue, style = MaterialTheme.typography.labelSmall)
                     }
                 }
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    channel.name,
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                if (favorite) {
-                    Spacer(Modifier.width(4.dp))
-                    Text("\u2665", color = ArcBlue, style = MaterialTheme.typography.labelMedium)
-                }
             }
-        }
-        Spacer(Modifier.width(8.dp))
-        Row(Modifier.weight(1f).height(58.dp)) {
-            if (entries.isNullOrEmpty()) {
-                Box(
-                    contentAlignment = Alignment.CenterStart,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-                ) {
-                    Text(
-                        if (epgLoading) "Loading guide\u2026" else "No guide data",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                    )
-                }
-            } else {
-                for (lane in lanesFor(entries, windowStart, windowEnd, nowSec)) {
-                    val weight = (lane.end - lane.start).toFloat().coerceAtLeast(1f)
-                    if (lane.title != null && lane.entry != null) {
-                        // A programme cell, Sky-style: focusable, darkening into
-                        // a highlight box and feeding the detail panel above.
-                        Surface(
-                            onClick = { onPlay(channel) },
-                            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
-                            colors = ClickableSurfaceDefaults.colors(
-                                containerColor = if (lane.onAir) ArcBlue.copy(alpha = 0.24f)
-                                else MaterialTheme.colorScheme.surfaceVariant,
-                                focusedContainerColor = Color(0xFF0A0F16),
-                                contentColor = MaterialTheme.colorScheme.onSurface,
-                                focusedContentColor = Color.White,
-                            ),
-                            border = ClickableSurfaceDefaults.border(
-                                focusedBorder = Border(
-                                    BorderStroke(2.dp, Color.White.copy(alpha = 0.7f)),
-                                    shape = RoundedCornerShape(8.dp),
+            Spacer(Modifier.width(6.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            ) {
+                if (entries.isNullOrEmpty()) {
+                    Box(
+                        contentAlignment = Alignment.CenterStart,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.White.copy(alpha = 0.03f)),
+                    ) {
+                        Text(
+                            if (epgLoading) "Loading guide…" else "No guide data",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(horizontal = 10.dp),
+                        )
+                    }
+                } else {
+                    for (lane in lanesFor(entries, windowStart, windowEnd, nowSec)) {
+                        val weight = (lane.end - lane.start).toFloat().coerceAtLeast(1f)
+                        if (lane.title != null && lane.entry != null) {
+                            Surface(
+                                onClick = { onPlay(channel) },
+                                onLongClick = { onToggleFavorite(channel) },
+                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(3.dp)),
+                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+                                colors = ClickableSurfaceDefaults.colors(
+                                    containerColor = if (lane.onAir) ArcBlue.copy(alpha = 0.24f)
+                                    else Color.White.copy(alpha = 0.06f),
+                                    focusedContainerColor = Color(0xFF0A0F16),
+                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                    focusedContentColor = Color.White,
                                 ),
-                            ),
-                            modifier = Modifier
-                                .weight(weight)
-                                .fillMaxHeight()
-                                .padding(end = 2.dp)
-                                .onFocusChanged {
-                                    if (it.isFocused) onProgrammeFocus(FocusedProgramme(channel, lane.entry))
-                                },
-                        ) {
-                            Box(Modifier.fillMaxSize()) {
-                                Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
+                                border = ClickableSurfaceDefaults.border(
+                                    focusedBorder = Border(
+                                        BorderStroke(1.5.dp, Color.White.copy(alpha = 0.75f)),
+                                        shape = RoundedCornerShape(3.dp),
+                                    ),
+                                ),
+                                modifier = Modifier
+                                    .weight(weight)
+                                    .fillMaxHeight()
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            onProgrammeFocus(FocusedProgramme(channel, lane.entry))
+                                        }
+                                    },
+                            ) {
+                                Box(Modifier.fillMaxSize()) {
                                     Text(
                                         lane.title,
-                                        style = MaterialTheme.typography.labelLarge,
+                                        style = MaterialTheme.typography.labelMedium,
                                         fontWeight = if (lane.onAir) FontWeight.SemiBold else FontWeight.Normal,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier
+                                            .align(Alignment.CenterStart)
+                                            .padding(horizontal = 9.dp),
                                     )
-                                    Text(
-                                        formatTime(lane.start),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                if (lane.onAir && lane.end > lane.start) {
-                                    val progress = ((nowSec - lane.start).toFloat() / (lane.end - lane.start))
-                                        .coerceIn(0f, 1f)
-                                    Box(
-                                        Modifier
-                                            .align(Alignment.BottomStart)
-                                            .fillMaxWidth(progress)
-                                            .height(3.dp)
-                                            .background(ArcBlue),
-                                    )
+                                    if (lane.onAir && lane.end > lane.start) {
+                                        val progress =
+                                            ((nowSec - lane.start).toFloat() / (lane.end - lane.start))
+                                                .coerceIn(0f, 1f)
+                                        Box(
+                                            Modifier
+                                                .align(Alignment.BottomStart)
+                                                .fillMaxWidth(progress)
+                                                .height(2.dp)
+                                                .background(ArcBlue),
+                                        )
+                                    }
                                 }
                             }
+                        } else {
+                            Box(
+                                Modifier
+                                    .weight(weight)
+                                    .fillMaxHeight()
+                                    .background(Color.White.copy(alpha = 0.02f)),
+                            )
                         }
-                    } else {
-                        Box(
-                            Modifier
-                                .weight(weight)
-                                .fillMaxHeight()
-                                .padding(end = 2.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-                        )
                     }
                 }
             }
         }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.06f)))
     }
 }
