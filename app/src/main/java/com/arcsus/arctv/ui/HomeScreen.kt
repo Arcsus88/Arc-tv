@@ -1,6 +1,7 @@
 package com.arcsus.arctv.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -67,8 +68,12 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
     if (selectedTab >= tabs.size) selectedTab = tabs.size - 1
     var searchOpen by rememberSaveable { mutableStateOf(false) }
 
-    // Sky Q layout: a left navigation rail (logo, clock, vertical menu with the
-    // active section boxed) and the content filling the rest of the panel.
+    val liveState by liveViewModel.state.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Sky Q layout: a left navigation rail (preview tile, vertical menu with
+    // the active section boxed, brand and clock at the foot) and the content
+    // filling the rest of the panel.
     Row(Modifier.fillMaxSize()) {
         NavRail(
             tabs = tabs,
@@ -77,6 +82,14 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
             onSearch = {
                 selectedTab = 0
                 searchOpen = true
+            },
+            preview = liveState.favorites.firstOrNull(),
+            onPreviewClick = { channel ->
+                if (!playVideo(context, channel.url, channel.name)) {
+                    android.widget.Toast.makeText(
+                        context, "No video player installed.", android.widget.Toast.LENGTH_LONG,
+                    ).show()
+                }
             },
         )
         Column(Modifier.weight(1f)) {
@@ -99,8 +112,10 @@ private fun NavRail(
     selected: Int,
     onSelect: (Int) -> Unit,
     onSearch: () -> Unit,
+    preview: com.arcsus.arctv.data.SavedChannel?,
+    onPreviewClick: (com.arcsus.arctv.data.SavedChannel) -> Unit,
 ) {
-    // Live clock and date, Sky-style ("11:00 · Wed 20 Jul").
+    // Live clock and date, Sky-style ("Monday \u00b7 19:11") at the rail's foot.
     val time by produceState(initialValue = clockNow()) {
         while (true) {
             value = clockNow()
@@ -112,33 +127,58 @@ private fun NavRail(
             .fillMaxHeight()
             .width(206.dp)
             .background(Color(0xFF0E1520))
-            .padding(horizontal = 14.dp, vertical = 20.dp),
+            .padding(horizontal = 14.dp, vertical = 18.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp)) {
-            Text(
-                buildAnnotatedString {
-                    withStyle(SpanStyle(color = ArcBlue, fontWeight = FontWeight.Bold)) {
-                        append("Arc")
+        // Sky's preview slot: the first favourite channel, one press to play.
+        // (A live video preview would hold the IPTV panel's single allowed
+        // connection hostage, so artwork stands in for the tuner picture.)
+        if (preview != null) {
+            androidx.tv.material3.Card(
+                onClick = { onPreviewClick(preview) },
+                modifier = Modifier.fillMaxWidth().height(96.dp),
+            ) {
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant)) {
+                    if (preview.logo.isNotBlank()) {
+                        coil.compose.AsyncImage(
+                            model = preview.logo,
+                            contentDescription = null,
+                            modifier = Modifier.size(44.dp).align(Alignment.Center),
+                        )
+                    } else {
+                        Text(
+                            preview.name.trim().firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "\u2022",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = ArcBlue,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.align(Alignment.Center),
+                        )
                     }
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(" TV") }
-                },
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Spacer(Modifier.weight(1f))
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    time.first,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    time.second,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                    Text(
+                        "LIVE",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(6.dp)
+                            .background(Color(0xFFD64545), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 1.dp),
+                    )
+                    Text(
+                        preview.name,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .fillMaxWidth()
+                            .background(Color.Black.copy(alpha = 0.55f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
             }
+            Spacer(Modifier.height(18.dp))
         }
-        Spacer(Modifier.height(26.dp))
         tabs.forEachIndexed { index, title ->
             RailItem(
                 title = title,
@@ -156,12 +196,30 @@ private fun NavRail(
             onActivate = onSearch,
             icon = Icons.Default.Search,
         )
+        Spacer(Modifier.height(16.dp))
+        Column(Modifier.padding(horizontal = 8.dp)) {
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(color = ArcBlue, fontWeight = FontWeight.Bold)) {
+                        append("Arc")
+                    }
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(" TV") }
+                },
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                "${time.second} \u00b7 ${time.first}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
 /**
- * One rail entry: the active section sits in a filled box (Sky's highlight),
- * focus turns the box accent. Section items switch on focus; action items
+ * One rail entry, Sky-style: the active section sits in a white box with dark
+ * text; focus fills the accent. Section items switch on focus; action items
  * (Search) only on click.
  */
 @Composable
@@ -174,11 +232,11 @@ private fun RailItem(
 ) {
     Surface(
         onClick = onActivate,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+            containerColor = if (selected) Color.White else Color.Transparent,
             focusedContainerColor = ArcBlue,
-            contentColor = if (selected) MaterialTheme.colorScheme.onSurface
+            contentColor = if (selected) Color(0xFF0B0F15)
             else MaterialTheme.colorScheme.onSurfaceVariant,
             focusedContentColor = MaterialTheme.colorScheme.onPrimary,
         ),
@@ -206,5 +264,5 @@ private fun RailItem(
 private fun clockNow(): Pair<String, String> {
     val now = Date()
     return SimpleDateFormat("HH:mm", Locale.getDefault()).format(now) to
-        SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(now)
+        SimpleDateFormat("EEEE", Locale.getDefault()).format(now)
 }
