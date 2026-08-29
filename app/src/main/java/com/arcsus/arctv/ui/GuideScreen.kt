@@ -2,6 +2,7 @@ package com.arcsus.arctv.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -38,9 +41,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import androidx.tv.material3.Button
+import androidx.tv.material3.Border
 import androidx.tv.material3.Card
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
+import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.arcsus.arctv.data.EpgEntry
 import com.arcsus.arctv.data.LiveChannel
@@ -53,7 +59,16 @@ private fun formatTime(unixSeconds: Long): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(unixSeconds * 1000))
 
 /** One block in a channel's programme lane, clipped to the guide window. */
-private data class Lane(val start: Long, val end: Long, val title: String?, val onAir: Boolean)
+private data class Lane(
+    val start: Long,
+    val end: Long,
+    val title: String?,
+    val onAir: Boolean,
+    val entry: EpgEntry? = null,
+)
+
+/** The programme the grid focus is resting on, feeding the detail panel. */
+internal data class FocusedProgramme(val channel: LiveChannel, val entry: EpgEntry)
 
 /** Walk a channel's listings across [windowStart, windowEnd), filling gaps. */
 private fun lanesFor(
@@ -69,7 +84,7 @@ private fun lanesFor(
         val s = maxOf(e.start, cursor)
         val end = minOf(e.stop, windowEnd)
         if (s > cursor) out.add(Lane(cursor, s, null, false))
-        out.add(Lane(s, end, e.title, e.start <= nowSec && nowSec < e.stop))
+        out.add(Lane(s, end, e.title, e.start <= nowSec && nowSec < e.stop, e))
         cursor = end
         if (cursor >= windowEnd) break
     }
@@ -179,6 +194,10 @@ fun GuideScreen(viewModel: GuideViewModel) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
+                        var focusedProgramme by remember(current) {
+                            mutableStateOf<FocusedProgramme?>(null)
+                        }
+                        ProgrammeDetail(focusedProgramme, state.nowMs / 1000)
                         GuideList(
                             channels = groupChannels,
                             epg = state.epg,
@@ -186,6 +205,7 @@ fun GuideScreen(viewModel: GuideViewModel) {
                             nowMs = state.nowMs,
                             favoriteUrls = state.favChannels.mapTo(HashSet()) { it.url },
                             onToggleFavorite = { viewModel.toggleFavorite(it) },
+                            onProgrammeFocus = { focusedProgramme = it },
                             onPlay = play,
                         )
                     }
@@ -258,6 +278,61 @@ private fun GroupPicker(
     }
 }
 
+/**
+ * Sky's detail header: whichever programme the grid focus rests on is
+ * described up here — channel, title, times, and the synopsis the guide
+ * data already carries.
+ */
+@Composable
+private fun ProgrammeDetail(info: FocusedProgramme?, nowSec: Long) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp).heightIn(min = 92.dp)) {
+        if (info == null) {
+            Text(
+                "Move around the grid — programme details appear here. OK plays the channel.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return
+        }
+        Text(
+            info.channel.name,
+            style = MaterialTheme.typography.labelMedium,
+            color = ArcBlue,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            info.entry.title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(3.dp))
+        val minutes = ((info.entry.stop - info.entry.start) / 60).toInt()
+        val onAir = info.entry.start <= nowSec && nowSec < info.entry.stop
+        Text(
+            (if (onAir) "On now · until ${formatTime(info.entry.stop)}"
+            else "Starts at ${formatTime(info.entry.start)}") + "   ·   ${minutes}m",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (info.entry.description.isNotBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                info.entry.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(0.85f),
+            )
+        }
+    }
+}
+
 /** Sky-style guide: channel column on the left, a 90-minute timeline of
  * proportionally sized programme blocks on the right, the on-air block
  * highlighted with a progress line. Blocks are decoration — the channel cell
@@ -272,6 +347,7 @@ private fun GuideList(
     nowMs: Long,
     favoriteUrls: Set<String>,
     onToggleFavorite: (LiveChannel) -> Unit,
+    onProgrammeFocus: (FocusedProgramme) -> Unit,
     onPlay: (LiveChannel) -> Unit,
 ) {
     val nowSec = nowMs / 1000
@@ -305,6 +381,7 @@ private fun GuideList(
                     windowEnd = windowEnd,
                     favorite = channel.url in favoriteUrls,
                     onToggleFavorite = onToggleFavorite,
+                    onProgrammeFocus = onProgrammeFocus,
                     onPlay = onPlay,
                 )
             }
@@ -322,6 +399,7 @@ private fun GuideRow(
     windowEnd: Long,
     favorite: Boolean,
     onToggleFavorite: (LiveChannel) -> Unit,
+    onProgrammeFocus: (FocusedProgramme) -> Unit,
     onPlay: (LiveChannel) -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -382,47 +460,71 @@ private fun GuideRow(
             } else {
                 for (lane in lanesFor(entries, windowStart, windowEnd, nowSec)) {
                     val weight = (lane.end - lane.start).toFloat().coerceAtLeast(1f)
-                    Box(
-                        Modifier
-                            .weight(weight)
-                            .fillMaxHeight()
-                            .padding(end = 2.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(
-                                when {
-                                    lane.onAir -> ArcBlue.copy(alpha = 0.24f)
-                                    lane.title != null -> MaterialTheme.colorScheme.surfaceVariant
-                                    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                                },
+                    if (lane.title != null && lane.entry != null) {
+                        // A programme cell, Sky-style: focusable, darkening into
+                        // a highlight box and feeding the detail panel above.
+                        Surface(
+                            onClick = { onPlay(channel) },
+                            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = if (lane.onAir) ArcBlue.copy(alpha = 0.24f)
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                                focusedContainerColor = Color(0xFF0A0F16),
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                focusedContentColor = Color.White,
                             ),
-                    ) {
-                        if (lane.title != null) {
-                            Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
-                                Text(
-                                    lane.title,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = if (lane.onAir) FontWeight.SemiBold else FontWeight.Normal,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    formatTime(lane.start),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (lane.onAir && lane.end > lane.start) {
-                                val progress = ((nowSec - lane.start).toFloat() / (lane.end - lane.start))
-                                    .coerceIn(0f, 1f)
-                                Box(
-                                    Modifier
-                                        .align(Alignment.BottomStart)
-                                        .fillMaxWidth(progress)
-                                        .height(3.dp)
-                                        .background(ArcBlue),
-                                )
+                            border = ClickableSurfaceDefaults.border(
+                                focusedBorder = Border(
+                                    BorderStroke(2.dp, Color.White.copy(alpha = 0.7f)),
+                                    shape = RoundedCornerShape(8.dp),
+                                ),
+                            ),
+                            modifier = Modifier
+                                .weight(weight)
+                                .fillMaxHeight()
+                                .padding(end = 2.dp)
+                                .onFocusChanged {
+                                    if (it.isFocused) onProgrammeFocus(FocusedProgramme(channel, lane.entry))
+                                },
+                        ) {
+                            Box(Modifier.fillMaxSize()) {
+                                Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
+                                    Text(
+                                        lane.title,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = if (lane.onAir) FontWeight.SemiBold else FontWeight.Normal,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        formatTime(lane.start),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                if (lane.onAir && lane.end > lane.start) {
+                                    val progress = ((nowSec - lane.start).toFloat() / (lane.end - lane.start))
+                                        .coerceIn(0f, 1f)
+                                    Box(
+                                        Modifier
+                                            .align(Alignment.BottomStart)
+                                            .fillMaxWidth(progress)
+                                            .height(3.dp)
+                                            .background(ArcBlue),
+                                    )
+                                }
                             }
                         }
+                    } else {
+                        Box(
+                            Modifier
+                                .weight(weight)
+                                .fillMaxHeight()
+                                .padding(end = 2.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                        )
                     }
                 }
             }
