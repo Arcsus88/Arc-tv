@@ -14,6 +14,7 @@ import com.arcsus.arctv.data.SettingsStore
 import com.arcsus.arctv.data.Source
 import com.arcsus.arctv.data.TitleDetails
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
@@ -120,6 +121,9 @@ class BrowseViewModel(
 
     // Session caches so reopening a title (or returning from a bad link) never
     // re-runs the slow torrent search. Cleared when the ViewModel is recreated.
+    /** The discover page in flight, cancelled when the group or section changes. */
+    private var discoverJob: Job? = null
+
     private val seasonsCache = mutableMapOf<Int, List<Season>>()
     private val episodesCache = mutableMapOf<String, List<Episode>>()
     private val sourcesCache = mutableMapOf<String, List<Source>>()
@@ -152,7 +156,8 @@ class BrowseViewModel(
 
     fun setTab(tab: BrowseTab) {
         if (tab == _state.value.tab) return
-        _state.update { it.copy(tab = tab, genreId = null) }
+        discoverJob?.cancel()
+        _state.update { it.copy(tab = tab, genreId = null, discoverLoading = false) }
         if (tab != BrowseTab.HOME) reloadDiscover()
     }
 
@@ -169,7 +174,19 @@ class BrowseViewModel(
     }
 
     private fun reloadDiscover() {
-        _state.update { it.copy(discoverItems = emptyList(), discoverPage = 0, discoverTotalPages = 1) }
+        // Drop the request already in flight: its page belongs to the group we
+        // just left. Leaving discoverLoading set made loadMoreDiscover bail out
+        // below, so changing group mid-load stranded the grid on "Loading..."
+        // until you changed it again.
+        discoverJob?.cancel()
+        _state.update {
+            it.copy(
+                discoverItems = emptyList(),
+                discoverPage = 0,
+                discoverTotalPages = 1,
+                discoverLoading = false,
+            )
+        }
         loadMoreDiscover()
     }
 
@@ -178,12 +195,18 @@ class BrowseViewModel(
         if (s.tab == BrowseTab.HOME || s.discoverLoading || s.discoverPage >= s.discoverTotalPages) return
         val type = if (s.tab == BrowseTab.TV) "tv" else "movie"
         val nextPage = s.discoverPage + 1
+        // What this page is for. A reply that lands after the user has moved on
+        // must not be pasted under the new group's chips.
+        val forTab = s.tab
+        val forGenre = s.genreId
+        val forSort = s.sortMode
         _state.update { it.copy(discoverLoading = true, error = null) }
-        viewModelScope.launch {
+        discoverJob = viewModelScope.launch {
             try {
-                val result = repository.discover(type, s.genreId, s.sortMode.key, nextPage)
+                val result = repository.discover(type, forGenre, forSort.key, nextPage)
                 _state.update {
-                    it.copy(
+                    if (it.tab != forTab || it.genreId != forGenre || it.sortMode != forSort) it
+                    else it.copy(
                         discoverLoading = false,
                         // Dedupe across pages so grid keys stay unique.
                         discoverItems = (it.discoverItems + result.items).distinctBy { i -> i.type + i.id },
@@ -194,7 +217,10 @@ class BrowseViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(discoverLoading = false, error = e.message ?: "Couldn't load catalogue.") }
+                _state.update {
+                    if (it.tab != forTab || it.genreId != forGenre || it.sortMode != forSort) it
+                    else it.copy(discoverLoading = false, error = e.message ?: "Couldn't load catalogue.")
+                }
             }
         }
     }

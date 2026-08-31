@@ -265,8 +265,15 @@ fun BrowseScreen(
 @Composable
 private fun CatalogRows(viewModel: BrowseViewModel) {
     val state by viewModel.state.collectAsState()
-    val rows = if (state.favorites.isEmpty()) state.rows
-    else listOf(com.arcsus.arctv.data.CatalogRow("♥ Favourites", state.favorites)) + state.rows
+    // Lazy lists crash outright on a repeated key, and a catalogue row can
+    // legitimately carry the same title twice (two providers, one film). Dedupe
+    // rows and their contents before they become keys.
+    val rows = (
+        if (state.favorites.isEmpty()) state.rows
+        else listOf(com.arcsus.arctv.data.CatalogRow("♥ Favourites", state.favorites)) + state.rows
+        )
+        .distinctBy { it.title }
+        .map { row -> row.copy(items = row.items.distinctBy { it.type + it.id }) }
     val heroItems = state.rows.firstOrNull()?.items?.take(10).orEmpty()
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -580,7 +587,9 @@ private fun DiscoverGrid(viewModel: BrowseViewModel) {
             // Sky's browse pattern: the focused tile is described above the grid.
             var focusedItem by remember { mutableStateOf<CatalogItem?>(null) }
             Column(Modifier.fillMaxSize()) {
-                FocusDetailHeader(focusedItem)
+                // Passed as a lambda, not a value: read here, every tile you
+                // moved onto recomposed the whole grid scope.
+                FocusDetailHeader { focusedItem }
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(4),
                     state = gridState,
@@ -602,8 +611,9 @@ private fun DiscoverGrid(viewModel: BrowseViewModel) {
 
 /** Sky's browse header: whichever tile the focus rests on is described here. */
 @Composable
-private fun FocusDetailHeader(item: CatalogItem?) {
+private fun FocusDetailHeader(focused: () -> CatalogItem?) {
     Column(Modifier.fillMaxWidth().padding(bottom = 10.dp).heightIn(min = 78.dp)) {
+        val item = focused()
         if (item == null) {
             Text(
                 "Move around the grid — details appear here.",
@@ -657,7 +667,7 @@ private fun SearchResults(results: List<CatalogItem>, searching: Boolean, viewMo
             contentPadding = PaddingValues(bottom = 32.dp, top = 4.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            gridItems(results, key = { it.type + it.id }) { item ->
+            gridItems(results.distinctBy { it.type + it.id }, key = { it.type + it.id }) { item ->
                 WideTile(item, Modifier, showType = true) { viewModel.openDetails(item) }
             }
         }
@@ -936,7 +946,7 @@ private fun SheetHost(sheet: BrowseViewModel.Sheet, viewModel: BrowseViewModel) 
             }
             Spacer(Modifier.height(12.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 340.dp)) {
-                items(s.sources, key = { it.magnet }) { source ->
+                items(s.sources.distinctBy { it.magnet }, key = { it.magnet }) { source ->
                     SourceRow(source, playing = s.playing == source.magnet) {
                         viewModel.playSource(source)
                     }

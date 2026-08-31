@@ -205,7 +205,9 @@ fun GuideScreen(viewModel: GuideViewModel) {
                                 var focusedProgramme by remember(current) {
                                     mutableStateOf<FocusedProgramme?>(null)
                                 }
-                                ProgrammeDetail(focusedProgramme, state.nowMs / 1000)
+                                // Lambda, not value: reading it here recomposed
+                                // every lane on each DPAD move.
+                                ProgrammeDetail({ focusedProgramme }, state.nowMs / 1000)
                                 GuideList(
                                     channels = groupChannels,
                                     epg = state.epg,
@@ -277,8 +279,11 @@ private fun GroupPicker(
         )
         Spacer(Modifier.height(12.dp))
         val needle = search.trim().lowercase()
+        // Panels repeat category names often enough to matter, and a repeated
+        // key crashes the grid.
         val matches = state.groups
             .filter { needle.isEmpty() || it.name.lowercase().contains(needle) }
+            .distinctBy { it.name }
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -319,8 +324,9 @@ private fun GroupPicker(
  * described up here — channel, title, times, and the synopsis.
  */
 @Composable
-private fun ProgrammeDetail(info: FocusedProgramme?, nowSec: Long) {
+private fun ProgrammeDetail(focused: () -> FocusedProgramme?, nowSec: Long) {
     Column(Modifier.fillMaxWidth().padding(bottom = 10.dp).heightIn(min = 88.dp)) {
+        val info = focused()
         if (info == null) {
             Text(
                 "Move around the grid — details appear here. OK plays a channel; long-press OK favourites it.",

@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -51,6 +52,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * How long focus must rest on a rail item before its section opens. Long
+ * enough to travel past a section without loading it, short enough that
+ * stopping on one feels immediate.
+ */
+private const val RAIL_SETTLE_MS = 280L
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun HomeScreen(factory: ArcTvViewModelFactory) {
@@ -76,6 +84,26 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
     if (selectedTab >= tabs.size) selectedTab = tabs.size - 1
     var searchOpen by rememberSaveable { mutableStateOf(false) }
 
+    // Opening a section mounts a whole screen and starts its loading. Rail
+    // focus therefore only *proposes* a section: travelling down the rail used
+    // to open -- and start fetching for -- every section it passed through,
+    // which is what made moving around the menu crawl. Pressing OK commits at
+    // once; resting on an item commits shortly after.
+    val openSection: (Int) -> Unit = { index ->
+        selectedTab = index
+        when (tabs.getOrNull(index)) {
+            "Browse" -> browseViewModel.setTab(BrowseTab.HOME)
+            "Movies" -> browseViewModel.setTab(BrowseTab.MOVIES)
+            "TV Shows" -> browseViewModel.setTab(BrowseTab.TV)
+        }
+    }
+    var proposedTab by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(proposedTab) {
+        if (proposedTab < 0 || proposedTab == selectedTab) return@LaunchedEffect
+        delay(RAIL_SETTLE_MS)
+        openSection(proposedTab)
+    }
+
     val liveState by liveViewModel.state.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -87,13 +115,10 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
             tabs = tabs,
             selected = selectedTab,
             onSelect = { index ->
-                selectedTab = index
-                when (tabs[index]) {
-                    "Browse" -> browseViewModel.setTab(BrowseTab.HOME)
-                    "Movies" -> browseViewModel.setTab(BrowseTab.MOVIES)
-                    "TV Shows" -> browseViewModel.setTab(BrowseTab.TV)
-                }
+                proposedTab = index
+                openSection(index)
             },
+            onPreview = { index -> proposedTab = index },
             onSearch = {
                 selectedTab = 0
                 searchOpen = true
@@ -146,6 +171,7 @@ private fun NavRail(
     tabs: List<String>,
     selected: Int,
     onSelect: (Int) -> Unit,
+    onPreview: (Int) -> Unit,
     onSearch: () -> Unit,
     preview: com.arcsus.arctv.data.SavedChannel?,
     onPreviewClick: (com.arcsus.arctv.data.SavedChannel) -> Unit,
@@ -227,8 +253,8 @@ private fun NavRail(
             RailItem(
                 title = title,
                 selected = index == selected,
-                activateOnFocus = true,
                 onActivate = { onSelect(index) },
+                onFocused = { onPreview(index) },
                 subdued = title == "Settings",
                 expanded = expanded,
             )
@@ -238,7 +264,6 @@ private fun NavRail(
         RailItem(
             title = "Search",
             selected = false,
-            activateOnFocus = false,
             onActivate = onSearch,
             icon = Icons.Default.Search,
             expanded = expanded,
@@ -276,15 +301,16 @@ private fun NavRail(
 
 /**
  * One rail entry, Sky-style: the active section sits in a white box with dark
- * text; focus fills the accent. Section items switch on focus; action items
- * (Search) only on click.
+ * text; focus fills the accent. [onFocused] reports that focus has arrived --
+ * the caller decides when that becomes a section change -- while OK activates
+ * straight away.
  */
 @Composable
 private fun RailItem(
     title: String,
     selected: Boolean,
-    activateOnFocus: Boolean,
     onActivate: () -> Unit,
+    onFocused: (() -> Unit)? = null,
     icon: ImageVector? = null,
     subdued: Boolean = false,
     expanded: Boolean = true,
@@ -304,7 +330,7 @@ private fun RailItem(
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { if (it.isFocused && activateOnFocus) onActivate() },
+            .onFocusChanged { if (it.isFocused) onFocused?.invoke() },
     ) {
         if (expanded) {
             Row(
