@@ -24,6 +24,24 @@ val releaseKeyPassword = signingValue("keyPassword", "KEY_PASSWORD")
 val hasReleaseSigning = releaseStoreFile != null && releaseStorePassword != null &&
     releaseKeyAlias != null && releaseKeyPassword != null
 
+// The release workflow passes the tag it is publishing as -PreleaseVersion, so
+// the installed build always reports exactly the version of the release it came
+// from. They used to be set independently, and any drift left the update banner
+// permanently offering a release the device already had.
+val fallbackVersion = "1.14.4"
+val releaseVersion: String =
+    (project.findProperty("releaseVersion") as String?)?.trim()?.removePrefix("v")
+        ?.takeIf { it.isNotEmpty() } ?: fallbackVersion
+
+/** 1.14.3 -> 11403, so a newer version always installs over an older one. */
+fun versionCodeOf(name: String): Int {
+    val parts = name.split('.', '-').map { it.toIntOrNull() ?: 0 }
+    val major = parts.getOrElse(0) { 0 }
+    val minor = parts.getOrElse(1) { 0 }
+    val patch = parts.getOrElse(2) { 0 }
+    return major * 10_000 + minor * 100 + patch
+}
+
 android {
     namespace = "com.arcsus.arctv"
     compileSdk = 36
@@ -32,8 +50,8 @@ android {
         applicationId = "com.arcsus.arctv"
         minSdk = 23
         targetSdk = 36
-        versionCode = 54
-        versionName = "1.14.3"
+        versionCode = versionCodeOf(releaseVersion)
+        versionName = releaseVersion
     }
 
     signingConfigs {

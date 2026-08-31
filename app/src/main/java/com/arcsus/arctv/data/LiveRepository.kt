@@ -49,7 +49,16 @@ class LiveRepository {
         /** Many IPTV panels reject unknown clients; a player UA keeps them happy. */
         private const val PLAYER_USER_AGENT = "VLC/3.0.20 LibVLC/3.0.20"
         private const val EPG_TTL_MS = 5 * 60 * 1000L
-        private val STREAM_ID = Regex("/live/[^/]+/[^/]+/(\\d+)\\.(?:m3u8|ts)(?:[?#]|$)", RegexOption.IGNORE_CASE)
+        // Panels export a channel in several URL shapes and playlists mix them:
+        //   /live/user/pass/123.m3u8   /live/user/pass/123.ts   /user/pass/123
+        // Matching only the first two left every legacy-form channel without a
+        // stream id, and so without any guide data at all.
+        private val STREAM_ID = Regex(
+            "/(?:live/)?[^/]+/[^/]+/(\\d+)(?:\\.[a-z0-9]+)?(?:[?#]|$)",
+            RegexOption.IGNORE_CASE,
+        )
+        /** Programmes fetched per channel: enough to fill the visible window and scroll on. */
+        private const val EPG_LIMIT = 12
     }
 
     private val client = OkHttpClient.Builder()
@@ -129,7 +138,8 @@ class LiveRepository {
         }
 
     // Guide listings cache: refetch after five minutes.
-    private val epgCache = mutableMapOf<String, Pair<Long, Map<String, List<EpgEntry>>>>()
+    /** Guide listings per "playlist:streamId", so overlapping requests reuse them. */
+    private val epgCache = mutableMapOf<String, Pair<Long, List<EpgEntry>>>()
 
     /** Whether a playlist can serve guide data (Xtream login, direct or via get.php). */
     fun supportsEpg(playlist: SavedPlaylist): Boolean =
@@ -140,7 +150,17 @@ class LiveRepository {
      * panel, keyed by channel URL. Channels without a recognisable stream id
      * simply get no listings.
      */
-    suspend fun epg(playlist: SavedPlaylist, channels: List<LiveChannel>): Map<String, List<EpgEntry>> =
+    /**
+     * Guide data for [channels], newly fetched or served from the per-channel
+     * cache. Callers ask for the rows they are about to show, so scrolling
+     * fills the guide in rather than everything past the first screenful
+     * reading "No guide data".
+     */
+    suspend fun epg(
+        playlist: SavedPlaylist,
+        channels: List<LiveChannel>,
+        limit: Int = 60,
+    ): Map<String, List<EpgEntry>> =
         withContext(Dispatchers.IO) {
             val login = if (playlist.isXtream) playlist else xtreamLoginFromM3uUrl(playlist.url)
                 ?: return@withContext emptyMap()
@@ -148,48 +168,58 @@ class LiveRepository {
             for (c in channels) {
                 val id = STREAM_ID.find(c.url)?.groupValues?.get(1)?.toLongOrNull() ?: continue
                 if (!byId.containsKey(id)) byId[id] = c.url
-                if (byId.size >= 60) break
+                if (byId.size >= limit) break
             }
             if (byId.isEmpty()) return@withContext emptyMap()
 
-            val cacheKey = "${login.key}:${byId.keys.joinToString(",")}"
-            epgCache[cacheKey]?.let { (at, data) ->
-                if (System.currentTimeMillis() - at < EPG_TTL_MS) return@withContext data
+            // Cached per channel, so asking for a window that overlaps an
+            // earlier one re-fetches only what is genuinely new.
+            val now = System.currentTimeMillis()
+            val result = LinkedHashMap<String, List<EpgEntry>>()
+            val wanted = LinkedHashMap<Long, String>()
+            for ((id, url) in byId) {
+                val hit = epgCache["${login.key}:$id"]
+                if (hit != null && now - hit.first < EPG_TTL_MS) result[url] = hit.second
+                else wanted[id] = url
             }
+            if (wanted.isEmpty()) return@withContext result
 
             val base = login.url.trimEnd('/')
             val sem = Semaphore(8)
             val fetched = coroutineScope {
-                byId.keys.map { id ->
+                wanted.keys.map { id ->
                     async {
                         sem.withPermit { id to fetchShortEpg(base, login.username, login.password, id) }
                     }
                 }.awaitAll()
             }
-            val result = buildMap {
-                for ((id, listings) in fetched) {
-                    val url = byId[id] ?: continue
-                    put(url, listings)
-                }
+            for ((id, listings) in fetched) {
+                val url = wanted[id] ?: continue
+                epgCache["${login.key}:$id"] = System.currentTimeMillis() to listings
+                result[url] = listings
             }
-            epgCache[cacheKey] = System.currentTimeMillis() to result
             result
         }
 
     private fun fetchShortEpg(base: String, user: String, pass: String, id: Long): List<EpgEntry> {
         return try {
-            val url = "$base/player_api.php?username=${encode(user)}&password=${encode(pass)}&action=get_short_epg&stream_id=$id&limit=4"
+            val url = "$base/player_api.php?username=${encode(user)}&password=${encode(pass)}" +
+                "&action=get_short_epg&stream_id=$id&limit=$EPG_LIMIT"
             val body = fetchJson(url) as? JsonObject ?: return emptyList()
             val listings = body["epg_listings"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()
             listings.mapNotNull { e ->
                 val o = e as? JsonObject ?: return@mapNotNull null
                 val title = decodeBase64(o["title"]?.jsonPrimitive?.content)
-                val stop = o["stop_timestamp"]?.jsonPrimitive?.content?.toLongOrNull() ?: 0L
+                // Panels disagree on these key names, and some send only the
+                // "yyyy-MM-dd HH:mm:ss" pair. Reading one spelling meant
+                // dropping every programme from the panels using another.
+                val start = epochOf(o, "start_timestamp", "start")
+                val stop = epochOf(o, "stop_timestamp", "end_timestamp", "stop", "end")
                 if (title.isBlank() || stop <= 0L) return@mapNotNull null
                 EpgEntry(
                     title = title,
                     description = decodeBase64(o["description"]?.jsonPrimitive?.content),
-                    start = o["start_timestamp"]?.jsonPrimitive?.content?.toLongOrNull() ?: 0L,
+                    start = start,
                     stop = stop,
                 )
             }
@@ -198,13 +228,34 @@ class LiveRepository {
         }
     }
 
+    /** First of [keys] that yields an epoch-seconds value, as a number or a datetime string. */
+    private fun epochOf(o: JsonObject, vararg keys: String): Long {
+        for (key in keys) {
+            val raw = o[key]?.jsonPrimitive?.content?.trim().orEmpty()
+            if (raw.isEmpty()) continue
+            raw.toLongOrNull()?.let { return it }
+            runCatching {
+                val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+                fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                fmt.parse(raw)?.time?.div(1000)
+            }.getOrNull()?.let { return it }
+        }
+        return 0L
+    }
+
     private fun decodeBase64(value: String?): String {
         if (value.isNullOrBlank()) return ""
-        return try {
+        // Plain titles are often valid base64 too, and decoding those produced
+        // mojibake rather than an error, so keep the decode only when it
+        // yields something readable.
+        val decoded = try {
             String(android.util.Base64.decode(value, android.util.Base64.DEFAULT), Charsets.UTF_8).trim()
         } catch (e: IllegalArgumentException) {
-            value
+            return value.trim()
         }
+        if (decoded.isEmpty()) return value.trim()
+        val readable = decoded.count { it == ' ' || it == '\n' || !it.isISOControl() && it.code < 0x2500 }
+        return if (readable * 10 >= decoded.length * 9) decoded else value.trim()
     }
 
     suspend fun channels(playlist: SavedPlaylist, refresh: Boolean = false): List<LiveChannel> {

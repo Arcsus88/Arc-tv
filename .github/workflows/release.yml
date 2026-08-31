@@ -40,7 +40,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --stacktrace
+        run: ./gradlew assembleRelease --stacktrace -PreleaseVersion="${RELEASE_TAG}"
 
       - name: Rename APK
         run: cp app/build/outputs/apk/release/app-release.apk "arc-tv-${RELEASE_TAG}.apk"

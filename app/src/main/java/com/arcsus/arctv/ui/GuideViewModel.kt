@@ -179,6 +179,9 @@ class GuideViewModel(
      * Make sure the current group's channels are in memory (fetching the
      * category on demand when the capped full load missed it), then load EPG.
      */
+    /** Channels already asked for, so scrolling doesn't re-request them. */
+    private val epgRequested = mutableSetOf<String>()
+
     private fun ensureGroupLoaded() {
         val s = _state.value
         val playlist = s.playlist ?: return
@@ -211,6 +214,32 @@ class GuideViewModel(
         }
     }
 
+    /**
+     * Guide data for rows the user is looking at. The list calls this as it
+     * scrolls, so a big group fills in on the way down instead of stopping
+     * dead after the first batch.
+     */
+    fun loadEpgFor(channels: List<LiveChannel>) {
+        val s = _state.value
+        val playlist = s.playlist ?: return
+        if (!s.epgCapable) return
+        val missing = channels.filter { it.url !in s.epg && it.url !in epgRequested }
+        if (missing.isEmpty()) return
+        missing.forEach { epgRequested.add(it.url) }
+        viewModelScope.launch {
+            try {
+                val epg = liveRepository.epg(playlist, missing, limit = missing.size)
+                _state.value = _state.value.copy(epg = _state.value.epg + epg)
+            } catch (e: CancellationException) {
+                missing.forEach { epgRequested.remove(it.url) }
+                throw e
+            } catch (e: Exception) {
+                // Let a failed stretch be retried the next time it scrolls by.
+                missing.forEach { epgRequested.remove(it.url) }
+            }
+        }
+    }
+
     private fun refreshEpg() {
         val s = _state.value
         val playlist = s.playlist ?: return
@@ -223,6 +252,7 @@ class GuideViewModel(
             _state.value = _state.value.copy(epgLoading = true)
             try {
                 val epg = liveRepository.epg(playlist, groupChannels)
+                groupChannels.take(60).forEach { epgRequested.add(it.url) }
                 _state.value = _state.value.copy(
                     epg = _state.value.epg + epg,
                     epgLoading = false,

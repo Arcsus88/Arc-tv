@@ -56,8 +56,19 @@ class UpdateChecker(private val context: Context) {
             // anonymous API calls per IP, and that must not read as up-to-date.
             if (!response.isSuccessful) throw IOException("GitHub answered HTTP ${response.code}")
             val releases = json.decodeFromString<List<GithubRelease>>(response.body!!.string())
-            val release = releases.firstOrNull { !it.draft && !it.prerelease }
-                ?: return@withContext null
+            // Highest version, not merely the most recent entry: re-publishing
+            // an older release would otherwise offer it as an "update", and a
+            // release without an APK attached must not hide a usable one.
+            val release = releases
+                .filter { !it.draft && !it.prerelease }
+                .filter { r -> r.assets.any { it.name.endsWith(".apk") } }
+                .maxWithOrNull { a, b ->
+                    when {
+                        a.tagName == b.tagName -> 0
+                        isNewer(a.tagName.removePrefix("v"), b.tagName.removePrefix("v")) -> 1
+                        else -> -1
+                    }
+                } ?: return@withContext null
             val remoteVersion = release.tagName.removePrefix("v")
             if (!isNewer(remoteVersion, BuildConfig.VERSION_NAME)) return@withContext null
             val apk = release.assets.firstOrNull { it.name.endsWith(".apk") }

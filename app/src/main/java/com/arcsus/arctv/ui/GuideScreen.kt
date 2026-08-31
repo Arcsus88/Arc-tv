@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -217,6 +218,7 @@ fun GuideScreen(viewModel: GuideViewModel) {
                                     onToggleFavorite = { viewModel.toggleFavorite(it) },
                                     onProgrammeFocus = { focusedProgramme = it },
                                     onPlay = play,
+                                    onRowsVisible = viewModel::loadEpgFor,
                                 )
                             }
                         }
@@ -389,6 +391,7 @@ private fun GuideList(
     onToggleFavorite: (LiveChannel) -> Unit,
     onProgrammeFocus: (FocusedProgramme) -> Unit,
     onPlay: (LiveChannel) -> Unit,
+    onRowsVisible: (List<LiveChannel>) -> Unit = {},
 ) {
     val nowSec = nowMs / 1000
     val windowStart = nowSec - nowSec % 1800
@@ -416,7 +419,18 @@ private fun GuideList(
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.12f)))
-        LazyColumn {
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        // Ask for listings a screen ahead of where the user is, so rows are
+        // filled by the time they reach them.
+        LaunchedEffect(listState, channels) {
+            androidx.compose.runtime.snapshotFlow {
+                listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            }.collect { last ->
+                val to = (last + 20).coerceAtMost(channels.size)
+                if (to > 0) onRowsVisible(channels.subList(0, to))
+            }
+        }
+        LazyColumn(state = listState) {
             items(channels.size, key = { channels[it].id }) { index ->
                 val channel = channels[index]
                 GuideRow(
