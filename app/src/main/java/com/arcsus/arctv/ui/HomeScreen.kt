@@ -1,6 +1,7 @@
 package com.arcsus.arctv.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,7 +26,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -46,6 +51,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun HomeScreen(factory: ArcTvViewModelFactory) {
     val updateViewModel: UpdateViewModel = viewModel(factory = factory)
@@ -101,7 +107,26 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
                 }
             },
         )
-        Column(Modifier.weight(1f)) {
+        Column(
+            Modifier
+                .weight(1f)
+                // Up/down stays inside the content. Without this, a DPAD-down
+                // that finds nothing focusable below it -- a grid still
+                // reloading after picking a genre, say -- lets focus fall
+                // sideways into the rail, and rail items switch section the
+                // moment they take focus: pressing down under Movies dropped
+                // you into the Guide. The rail is still one LEFT away.
+                .focusProperties {
+                    exit = { direction ->
+                        if (direction == FocusDirection.Up || direction == FocusDirection.Down) {
+                            FocusRequester.Cancel
+                        } else {
+                            FocusRequester.Default
+                        }
+                    }
+                }
+                .focusGroup(),
+        ) {
             UpdateBanner(updateViewModel)
             when (tabs[selectedTab]) {
                 "Browse", "Movies", "TV Shows" ->
