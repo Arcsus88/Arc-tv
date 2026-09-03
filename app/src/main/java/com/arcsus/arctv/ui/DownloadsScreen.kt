@@ -189,6 +189,8 @@ fun CenteredMessage(message: String) {
             message,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(0.6f),
         )
     }
 }
@@ -196,8 +198,12 @@ fun CenteredMessage(message: String) {
 @Composable
 fun CenteredError(message: String, onRetry: () -> Unit) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(message, style = MaterialTheme.typography.titleMedium)
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth(0.6f)) {
+            Text(
+                message,
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
             Spacer(Modifier.height(16.dp))
             Button(onClick = onRetry) { Text("Retry") }
         }

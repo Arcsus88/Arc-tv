@@ -69,6 +69,8 @@ fun LiveScreen(viewModel: LiveViewModel) {
                     "Add an M3U link or Xtream login in the Settings tab to watch Live TV.",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(0.6f),
                 )
             }
             return@Column
@@ -119,7 +121,13 @@ fun LiveScreen(viewModel: LiveViewModel) {
             }
 
             error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(0.6f),
+                )
             }
 
             query.isNotBlank() -> {

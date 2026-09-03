@@ -115,6 +115,8 @@ fun GuideScreen(viewModel: GuideViewModel) {
                         "Add an M3U link or Xtream login in the Settings tab to use the guide.",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(0.6f),
                     )
                 }
             }
@@ -131,6 +133,8 @@ fun GuideScreen(viewModel: GuideViewModel) {
                         state.error.orEmpty(),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.titleMedium,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(0.6f),
                     )
                 }
             }

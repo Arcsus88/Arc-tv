@@ -3,6 +3,9 @@ package com.arcsus.arctv
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -17,6 +20,10 @@ import com.arcsus.arctv.ui.AuthScreen
 import com.arcsus.arctv.ui.AuthViewModel
 import com.arcsus.arctv.ui.HomeScreen
 import com.arcsus.arctv.ui.theme.ArcTvTheme
+
+/** TV-safe margins (about 5% of a 1080p picture), see the note in onCreate. */
+private val OVERSCAN_HORIZONTAL = 44.dp
+private val OVERSCAN_VERTICAL = 24.dp
 
 class MainActivity : ComponentActivity() {
 
@@ -36,13 +43,26 @@ class MainActivity : ComponentActivity() {
                     val authorized by produceState<Boolean?>(initialValue = null) {
                         app.tokenStore.isAuthorized.collect { value = it }
                     }
-                    when (authorized) {
-                        null -> Unit // still reading DataStore
-                        false -> {
-                            val authViewModel: AuthViewModel = viewModel(factory = factory)
-                            AuthScreen(authViewModel)
+                    // Overscan: most TVs crop the outer few percent of the
+                    // picture, so anything flush with the edge is lost. Android
+                    // TV's guidance is a 5% safe zone; this keeps every screen
+                    // inside it while the background still paints edge to edge.
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .padding(
+                                horizontal = OVERSCAN_HORIZONTAL,
+                                vertical = OVERSCAN_VERTICAL,
+                            ),
+                    ) {
+                        when (authorized) {
+                            null -> Unit // still reading DataStore
+                            false -> {
+                                val authViewModel: AuthViewModel = viewModel(factory = factory)
+                                AuthScreen(authViewModel)
+                            }
+                            true -> HomeScreen(factory)
                         }
-                        true -> HomeScreen(factory)
                     }
                 }
             }
