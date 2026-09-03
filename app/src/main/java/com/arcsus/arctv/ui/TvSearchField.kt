@@ -21,7 +21,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -63,6 +65,7 @@ fun TvEditField(
     var active by remember { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     fun deactivate() {
         if (!active) return
@@ -119,16 +122,32 @@ fun TvEditField(
                         val isSelect = event.key == Key.DirectionCenter ||
                             event.key == Key.Enter ||
                             event.key == Key.NumPadEnter
-                        if (!active && isSelect) {
-                            // Activate on KeyUp so the press that opened editing
-                            // can't leak into the now-editable field as an Enter.
-                            if (event.type == KeyEventType.KeyUp) {
-                                active = true
-                                keyboard?.show()
+                        // A text field swallows the arrow keys to move its
+                        // cursor -- even read-only -- so D-pad focus could land
+                        // on a field and never leave it. While locked, arrows
+                        // are navigation: hand them to the focus system.
+                        val arrow = when (event.key) {
+                            Key.DirectionUp -> FocusDirection.Up
+                            Key.DirectionDown -> FocusDirection.Down
+                            Key.DirectionLeft -> FocusDirection.Left
+                            Key.DirectionRight -> FocusDirection.Right
+                            else -> null
+                        }
+                        when {
+                            !active && arrow != null -> {
+                                if (event.type == KeyEventType.KeyDown) focusManager.moveFocus(arrow)
+                                true
                             }
-                            true
-                        } else {
-                            false
+                            !active && isSelect -> {
+                                // Activate on KeyUp so the press that opened editing
+                                // can't leak into the now-editable field as an Enter.
+                                if (event.type == KeyEventType.KeyUp) {
+                                    active = true
+                                    keyboard?.show()
+                                }
+                                true
+                            }
+                            else -> false
                         }
                     },
             )

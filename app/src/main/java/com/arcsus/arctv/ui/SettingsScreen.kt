@@ -152,6 +152,14 @@ fun SettingsScreen(viewModel: SettingsViewModel, updateViewModel: UpdateViewMode
 
         item { SectionTitle("Live TV playlists") }
 
+        item {
+            PairingCard(
+                state = state.pairing,
+                onStart = { viewModel.startPairing() },
+                onCancel = { viewModel.cancelPairing() },
+            )
+        }
+
         if (state.playlists.isEmpty()) {
             item {
                 Text(

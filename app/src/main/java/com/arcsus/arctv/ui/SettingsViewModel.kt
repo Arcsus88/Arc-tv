@@ -5,12 +5,14 @@ import androidx.lifecycle.viewModelScope
 import com.arcsus.arctv.data.AllDebridException
 import com.arcsus.arctv.data.AllDebridRepository
 import com.arcsus.arctv.data.AuthExpiredException
+import com.arcsus.arctv.data.PairingRepository
 import com.arcsus.arctv.data.RdRepository
 import com.arcsus.arctv.data.SavedPlaylist
 import com.arcsus.arctv.data.SettingsStore
 import com.arcsus.arctv.data.TokenStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -29,18 +31,35 @@ class SettingsViewModel(
         data class Error(val provider: DebridProvider, val message: String) : ConnectState
     }
 
+    /** "Send to TV": playlists arrive from the phone against a short code. */
+    sealed interface PairState {
+        data object Idle : PairState
+        data class Showing(val code: String, val url: String) : PairState
+        /** [added] new playlists saved; [received] is how many the phone sent. */
+        data class Done(val added: Int, val received: Int) : PairState
+        data class Error(val message: String) : PairState
+    }
+
     data class UiState(
         val rdConnected: Boolean = false,
         val adConnected: Boolean = false,
         val torboxToken: String = "",
         val playlists: List<SavedPlaylist> = emptyList(),
         val connect: ConnectState = ConnectState.Idle,
+        val pairing: PairState = PairState.Idle,
     )
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state
 
     private var connectJob: Job? = null
+    private val pairing = PairingRepository()
+    private var pairJob: Job? = null
+
+    companion object {
+        private const val PAIR_POLL_MS = 3_000L
+        private const val PAIR_TIMEOUT_MS = 10 * 60 * 1000L
+    }
 
     init {
         viewModelScope.launch {
@@ -116,6 +135,57 @@ class SettingsViewModel(
                 DebridProvider.ALL_DEBRID -> adRepository.signOut()
             }
         }
+    }
+
+    /** Show a code the phone can send playlists to, then wait for them. */
+    fun startPairing() {
+        pairJob?.cancel()
+        pairJob = viewModelScope.launch {
+            val code = pairing.newCode()
+            try {
+                pairing.open(code)
+                _state.value = _state.value.copy(
+                    pairing = PairState.Showing(code, PairingRepository.PAIR_WEB_URL),
+                )
+                val deadline = System.currentTimeMillis() + PAIR_TIMEOUT_MS
+                while (System.currentTimeMillis() < deadline) {
+                    delay(PAIR_POLL_MS)
+                    when (val poll = runCatching { pairing.take(code) }.getOrNull()) {
+                        null, PairingRepository.Poll.Waiting -> Unit // transient error or nothing yet
+                        PairingRepository.Poll.Expired -> {
+                            _state.value = _state.value.copy(
+                                pairing = PairState.Error("That code expired. Start again for a new one."),
+                            )
+                            return@launch
+                        }
+                        is PairingRepository.Poll.Ready -> {
+                            val current = settingsStore.currentPlaylists()
+                            val known = current.mapTo(HashSet()) { it.key }
+                            val fresh = poll.playlists.distinctBy { it.key }.filter { it.key !in known }
+                            if (fresh.isNotEmpty()) settingsStore.savePlaylists(current + fresh)
+                            _state.value = _state.value.copy(
+                                pairing = PairState.Done(added = fresh.size, received = poll.playlists.size),
+                            )
+                            return@launch
+                        }
+                    }
+                }
+                _state.value = _state.value.copy(
+                    pairing = PairState.Error("Nothing arrived in ten minutes. Start again for a new code."),
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    pairing = PairState.Error(e.message ?: "Couldn't reach the pairing server."),
+                )
+            }
+        }
+    }
+
+    fun cancelPairing() {
+        pairJob?.cancel()
+        _state.value = _state.value.copy(pairing = PairState.Idle)
     }
 
     fun saveTorboxToken(token: String) {
