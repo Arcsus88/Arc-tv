@@ -67,6 +67,9 @@ import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Card
+import coil.request.ImageRequest
+import androidx.tv.material3.Glow
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -306,10 +309,10 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
                 Spacer(Modifier.height(10.dp))
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    contentPadding = PaddingValues(horizontal = 40.dp),
+                    contentPadding = PaddingValues(horizontal = 40.dp, vertical = 12.dp),
                 ) {
                     items(row.items, key = { it.type + it.id }) { item ->
-                        WideTile(item, Modifier.width(222.dp)) { viewModel.openDetails(item) }
+                        WideTile(item, Modifier.width(POSTER_WIDTH)) { viewModel.openDetails(item) }
                     }
                     // Sky's "More Top Picks" closer: jumps to the full catalogue.
                     val moreType = row.items.firstOrNull()?.type
@@ -489,10 +492,10 @@ private fun HeroBanner(
             Spacer(Modifier.height(8.dp))
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(horizontal = 40.dp),
+                contentPadding = PaddingValues(horizontal = 40.dp, vertical = 12.dp),
             ) {
                 items(rowItems, key = { it.type + it.id }) { rowItem ->
-                    WideTile(rowItem, Modifier.width(222.dp)) { onOpen(rowItem) }
+                    WideTile(rowItem, Modifier.width(POSTER_WIDTH)) { onOpen(rowItem) }
                 }
                 val moreType = rowItems.firstOrNull()?.type
                 if (moreType != null && !rowTitle.startsWith("\u2665")) {
@@ -675,14 +678,26 @@ private fun SearchResults(results: List<CatalogItem>, searching: Boolean, viewMo
 }
 
 /** Row closer in the style of Sky's "More Top Picks" tile. */
+/** Poster tile width in rows; the grids size theirs from their columns. */
+private val POSTER_WIDTH = 168.dp
+
 @Composable
 private fun MoreTile(tv: Boolean, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.width(222.dp)) {
+    val shape = RoundedCornerShape(10.dp)
+    Card(
+        onClick = onClick,
+        shape = CardDefaults.shape(shape),
+        scale = CardDefaults.scale(focusedScale = 1.07f),
+        border = CardDefaults.border(
+            focusedBorder = Border(BorderStroke(2.dp, Color.White), shape = shape),
+        ),
+        modifier = Modifier.width(POSTER_WIDTH),
+    ) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(16f / 9f)
+                .aspectRatio(2f / 3f)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -718,16 +733,36 @@ private fun WideTile(
     onFocus: ((CatalogItem) -> Unit)? = null,
     onClick: () -> Unit,
 ) {
+    // Poster-shaped (2:3), like the artwork itself: taller, bigger, and the
+    // title sits on a scrim at the foot. Focus lifts the tile with a soft
+    // accent glow and a white keyline.
+    val shape = RoundedCornerShape(10.dp)
     Card(
         onClick = onClick,
+        shape = CardDefaults.shape(shape),
+        scale = CardDefaults.scale(focusedScale = 1.07f),
+        border = CardDefaults.border(
+            focusedBorder = Border(BorderStroke(2.dp, Color.White), shape = shape),
+        ),
+        glow = CardDefaults.glow(
+            focusedGlow = Glow(elevationColor = ArcBlue.copy(alpha = 0.55f), elevation = 14.dp),
+        ),
         modifier = modifier.let { m ->
             if (onFocus == null) m
             else m.onFocusChanged { if (it.isFocused) onFocus(item) }
         },
     ) {
-        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
             AsyncImage(
-                model = item.backdrop.ifBlank { item.poster },
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(item.poster.ifBlank { item.backdrop })
+                    .crossfade(180)
+                    .build(),
                 contentDescription = item.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
@@ -736,17 +771,17 @@ private fun WideTile(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .height(56.dp)
+                    .height(96.dp)
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f)),
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.92f)),
                         ),
                     ),
             )
             Column(
                 Modifier
                     .align(Alignment.BottomStart)
-                    .padding(horizontal = 9.dp, vertical = 7.dp),
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
             ) {
                 if (showType) {
                     Text(
@@ -758,16 +793,23 @@ private fun WideTile(
                             .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
                             .padding(horizontal = 5.dp, vertical = 1.dp),
                     )
-                    Spacer(Modifier.height(3.dp))
+                    Spacer(Modifier.height(4.dp))
                 }
                 Text(
                     item.title,
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (item.year.isNotBlank()) {
+                    Text(
+                        item.year,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.72f),
+                    )
+                }
             }
         }
     }

@@ -22,6 +22,7 @@ fun ArcTvTheme(content: @Composable () -> Unit) {
             onSurface = Color(0xFFEAF0F6),
             onSurfaceVariant = Color(0xFFAFBAC7),
         ),
+        typography = ArcTypography,
         content = content,
     )
 }

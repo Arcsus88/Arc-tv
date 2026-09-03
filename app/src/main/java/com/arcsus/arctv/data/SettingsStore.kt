@@ -51,6 +51,19 @@ class SettingsStore(context: Context) {
         val GUIDE_ACTIVE_GROUP = stringPreferencesKey("guide_active_group")
         val FAVORITES = stringPreferencesKey("favorites")
         val FAVORITE_CHANNELS = stringPreferencesKey("favorite_channels")
+        val LIVE_SETUP_DONE = androidx.datastore.preferences.core.booleanPreferencesKey("live_setup_done")
+    }
+
+    /**
+     * Whether first-run setup should still offer the Live TV step. Anyone who
+     * already has playlists (or has dismissed the step) skips it.
+     */
+    val liveSetupNeeded: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[Keys.LIVE_SETUP_DONE] != true && decodePlaylists(prefs[Keys.PLAYLISTS]).isEmpty()
+    }
+
+    suspend fun markLiveSetupDone() {
+        dataStore.edit { it[Keys.LIVE_SETUP_DONE] = true }
     }
 
     val torboxToken: Flow<String> = dataStore.data.map { it[Keys.TORBOX_TOKEN].orEmpty() }
