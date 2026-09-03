@@ -42,6 +42,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Border
+import androidx.compose.foundation.BorderStroke
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -315,19 +317,27 @@ private fun RailItem(
     subdued: Boolean = false,
     expanded: Boolean = true,
 ) {
+    // Sky Q's signature: the section you're in sits in a solid white box.
+    // Focus is a white keyline (with a faint fill) -- it becomes the white
+    // box itself a moment later, when the section opens.
+    val shape = RoundedCornerShape(6.dp)
     Surface(
         onClick = onActivate,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+        shape = ClickableSurfaceDefaults.shape(shape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) Color.White else Color.Transparent,
-            focusedContainerColor = ArcBlue,
+            focusedContainerColor = if (selected) Color.White else Color.White.copy(alpha = 0.10f),
             contentColor = when {
                 selected -> Color(0xFF0B0F15)
                 subdued -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
             },
-            focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+            focusedContentColor = if (selected) Color(0xFF0B0F15) else Color.White,
         ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(BorderStroke(1.5.dp, Color.White), shape = shape),
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         modifier = Modifier
             .fillMaxWidth()
             .onFocusChanged { if (it.isFocused) onFocused?.invoke() },
@@ -335,7 +345,7 @@ private fun RailItem(
         if (expanded) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
             ) {
                 if (icon != null) {
                     Icon(icon, contentDescription = null, Modifier.size(16.dp))
@@ -350,7 +360,7 @@ private fun RailItem(
         } else {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 11.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 13.dp),
             ) {
                 if (icon != null) {
                     Icon(icon, contentDescription = title, Modifier.size(16.dp))

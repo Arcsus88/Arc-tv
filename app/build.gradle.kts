@@ -6,6 +6,8 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    // Screenshot tests: real screens rendered on the JVM (no emulator needed).
+    alias(libs.plugins.roborazzi)
 }
 
 // Release signing: read from keystore.properties (gitignored) or environment (CI).
@@ -28,7 +30,7 @@ val hasReleaseSigning = releaseStoreFile != null && releaseStorePassword != null
 // the installed build always reports exactly the version of the release it came
 // from. They used to be set independently, and any drift left the update banner
 // permanently offering a release the device already had.
-val fallbackVersion = "1.15.2"
+val fallbackVersion = "1.16.0"
 val releaseVersion: String =
     (project.findProperty("releaseVersion") as String?)?.trim()?.removePrefix("v")
         ?.takeIf { it.isNotEmpty() } ?: fallbackVersion
@@ -62,6 +64,13 @@ android {
                 keyAlias = releaseKeyAlias
                 keyPassword = releaseKeyPassword
             }
+        }
+    }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all { it.maxHeapSize = "3g" }
         }
     }
 
@@ -108,4 +117,15 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
     implementation(libs.zxing.core)
+
+    // Design-loop screenshot harness (test only; nothing ships).
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.ext.junit)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
+    debugImplementation(libs.compose.ui.test.manifest)
 }

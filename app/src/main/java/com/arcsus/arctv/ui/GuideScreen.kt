@@ -211,8 +211,15 @@ fun GuideScreen(viewModel: GuideViewModel) {
                                     mutableStateOf<FocusedProgramme?>(null)
                                 }
                                 // Lambda, not value: reading it here recomposed
-                                // every lane on each DPAD move.
-                                ProgrammeDetail({ focusedProgramme }, state.nowMs / 1000)
+                                // every lane on each DPAD move. Until something
+                                // is focused, the header describes what's on now
+                                // on the first channel that has listings.
+                                val nowSec = state.nowMs / 1000
+                                val onNow = groupChannels.firstNotNullOfOrNull { ch ->
+                                    state.epg[ch.url]?.firstOrNull { it.start <= nowSec && nowSec < it.stop }
+                                        ?.let { FocusedProgramme(ch, it) }
+                                }
+                                ProgrammeDetail({ focusedProgramme ?: onNow }, nowSec)
                                 GuideList(
                                     channels = groupChannels,
                                     epg = state.epg,
@@ -271,7 +278,7 @@ private fun GroupPicker(
     Column(Modifier.fillMaxSize()) {
         Text(
             if (validSelected.isEmpty())
-                "Pick the channel groups you want in your guide — try searching “UK”."
+                "Choose the channel groups for your guide. Search for “UK” to find yours quickly."
             else "Add another group, or remove one you no longer want.",
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -335,7 +342,7 @@ private fun ProgrammeDetail(focused: () -> FocusedProgramme?, nowSec: Long) {
         val info = focused()
         if (info == null) {
             Text(
-                "Move around the grid — details appear here. OK plays a channel; long-press OK favourites it.",
+                "Listings are on their way. OK plays a channel; hold OK to favourite it.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -434,11 +441,13 @@ private fun GuideList(
                 if (to > 0) onRowsVisible(channels.subList(0, to))
             }
         }
+        val prefix = remember(channels) { sharedPrefix(channels.map { it.name }) }
         LazyColumn(state = listState) {
             items(channels.size, key = { channels[it].id }) { index ->
                 val channel = channels[index]
                 GuideRow(
                     channel = channel,
+                    displayName = channel.name.removePrefix(prefix).trim(),
                     entries = epg[channel.url],
                     epgLoading = epgLoading,
                     nowSec = nowSec,
@@ -454,9 +463,24 @@ private fun GuideList(
     }
 }
 
+/**
+ * The prefix a panel stamps on every channel in a group ("UK| ", "US: "),
+ * so rows can show "BBC One HD" rather than truncating "UK| BBC One H...".
+ */
+private fun sharedPrefix(names: List<String>): String {
+    if (names.size < 3) return ""
+    val first = names.first()
+    val cut = first.indexOfFirst { it == '|' || it == ':' }
+    if (cut !in 1..7) return ""
+    val prefix = first.substring(0, cut + 1)
+    val hits = names.count { it.startsWith(prefix) }
+    return if (hits * 10 >= names.size * 8) prefix else ""
+}
+
 @Composable
 private fun GuideRow(
     channel: LiveChannel,
+    displayName: String,
     entries: List<EpgEntry>?,
     epgLoading: Boolean,
     nowSec: Long,
@@ -505,7 +529,7 @@ private fun GuideRow(
                     }
                     Spacer(Modifier.width(7.dp))
                     Text(
-                        channel.name,
+                        displayName,
                         style = MaterialTheme.typography.labelMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

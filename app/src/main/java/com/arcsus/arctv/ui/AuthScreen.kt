@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -45,24 +46,32 @@ fun AuthScreen(viewModel: AuthViewModel) {
                     modifier = Modifier.padding(48.dp),
                 ) {
                     Text(
-                        "Sign in",
-                        style = MaterialTheme.typography.headlineMedium,
+                        "Step 1 of 2",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Welcome to Arc TV",
+                        style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "Connect a debrid account to start streaming.",
+                        "Sign in with your debrid account to stream films and series. Live TV is the next step.",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(0.6f),
                     )
-                    Spacer(Modifier.height(32.dp))
+                    Spacer(Modifier.height(36.dp))
                     Row {
-                        Button(onClick = { viewModel.start(DebridProvider.REAL_DEBRID) }) {
-                            Text("Real-Debrid")
+                        ProviderCard("Real-Debrid", "real-debrid.com") {
+                            viewModel.start(DebridProvider.REAL_DEBRID)
                         }
-                        Spacer(Modifier.width(16.dp))
-                        Button(onClick = { viewModel.start(DebridProvider.ALL_DEBRID) }) {
-                            Text("AllDebrid")
+                        Spacer(Modifier.width(20.dp))
+                        ProviderCard("AllDebrid", "alldebrid.com") {
+                            viewModel.start(DebridProvider.ALL_DEBRID)
                         }
                     }
                 }
@@ -79,11 +88,17 @@ fun AuthScreen(viewModel: AuthViewModel) {
                     modifier = Modifier.padding(48.dp),
                 ) {
                     Text(
+                        "Step 1 of 2",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
                         "Sign in to ${s.provider.label}",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                     )
-                    Spacer(Modifier.height(32.dp))
+                    Spacer(Modifier.height(28.dp))
                     Text(
                         "On your phone or computer, go to",
                         style = MaterialTheme.typography.titleMedium,
@@ -153,6 +168,38 @@ fun AuthScreen(viewModel: AuthViewModel) {
                     }
                 }
             }
+        }
+    }
+}
+
+/** A provider as a Sky-style tile: name, then where the account lives. */
+@Composable
+private fun ProviderCard(name: String, site: String, onClick: () -> Unit) {
+    androidx.tv.material3.Card(
+        onClick = onClick,
+        shape = androidx.tv.material3.CardDefaults.shape(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)),
+        scale = androidx.tv.material3.CardDefaults.scale(focusedScale = 1.05f),
+        border = androidx.tv.material3.CardDefaults.border(
+            focusedBorder = androidx.tv.material3.Border(
+                androidx.compose.foundation.BorderStroke(2.dp, androidx.compose.ui.graphics.Color.White),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+            ),
+        ),
+        modifier = Modifier.width(250.dp),
+    ) {
+        Column(Modifier.padding(horizontal = 22.dp, vertical = 20.dp)) {
+            Text(
+                name,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                site,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

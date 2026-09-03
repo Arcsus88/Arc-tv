@@ -119,6 +119,8 @@ class LiveRepository {
             for ((index, s) in streams.withIndex()) {
                 val o = s as? JsonObject ?: continue
                 val streamId = o["stream_id"]?.jsonPrimitive?.content ?: continue
+                // Decorative "#### GROUP ####" rows are not channels.
+                if ((o["name"]?.jsonPrimitive?.content ?: "").contains("####")) continue
                 val streamUrl = "$base/live/${encode(login.username)}/${encode(login.password)}/$streamId.m3u8"
                 result.add(
                     LiveChannel(

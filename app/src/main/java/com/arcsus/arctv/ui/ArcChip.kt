@@ -28,22 +28,31 @@ fun TextChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Same language as the rail: the chosen chip is a white box, focus is a
+    // white keyline. The accent stays out of it.
+    val shape = RoundedCornerShape(50)
     Surface(
         onClick = onClick,
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) ArcBlue else Color.Transparent,
-            focusedContainerColor = if (selected) ArcBlue else MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-            focusedContentColor = if (selected) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurface,
+            containerColor = if (selected) Color.White else Color.Transparent,
+            focusedContainerColor = if (selected) Color.White else Color.White.copy(alpha = 0.10f),
+            contentColor = if (selected) Color(0xFF0B0F15) else MaterialTheme.colorScheme.onSurfaceVariant,
+            focusedContentColor = if (selected) Color(0xFF0B0F15) else Color.White,
         ),
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = androidx.tv.material3.Border(
+                androidx.compose.foundation.BorderStroke(1.5.dp, Color.White),
+                shape = shape,
+            ),
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        shape = ClickableSurfaceDefaults.shape(shape),
         modifier = modifier,
     ) {
         Text(
             label,
             style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else null,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
@@ -51,7 +60,7 @@ fun TextChip(
     }
 }
 
-/** The app-wide selectable chip: filled accent when selected, outlined otherwise. */
+/** The app-wide selectable chip: a white box when chosen, a quiet panel otherwise. */
 @Composable
 fun ArcChip(
     label: String,
@@ -59,20 +68,32 @@ fun ArcChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (selected) {
-        Button(
-            onClick = onClick,
-            modifier = modifier,
-            colors = ButtonDefaults.colors(
-                containerColor = ArcBlue,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+    val shape = RoundedCornerShape(50)
+    Surface(
+        onClick = onClick,
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) Color.White else MaterialTheme.colorScheme.surfaceVariant,
+            focusedContainerColor = if (selected) Color.White else MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = if (selected) Color(0xFF0B0F15) else MaterialTheme.colorScheme.onSurface,
+            focusedContentColor = if (selected) Color(0xFF0B0F15) else Color.White,
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = androidx.tv.material3.Border(
+                androidx.compose.foundation.BorderStroke(1.5.dp, Color.White),
+                shape = shape,
             ),
-        ) {
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    } else {
-        OutlinedButton(onClick = onClick, modifier = modifier) {
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        shape = ClickableSurfaceDefaults.shape(shape),
+        modifier = modifier,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else null,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+        )
     }
 }

@@ -76,7 +76,15 @@ fun LiveScreen(viewModel: LiveViewModel) {
             return@Column
         }
 
+        // Sky's section header: the title, then the playlist choices, with
+        // the refresh tucked to the far right.
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Live TV",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            )
+            Spacer(Modifier.width(28.dp))
             state.playlists.forEach { playlist ->
                 val isActive = state.active?.key == playlist.key
                 ArcChip(
@@ -92,27 +100,21 @@ fun LiveScreen(viewModel: LiveViewModel) {
             }
             Spacer(Modifier.weight(1f))
             state.active?.let { active ->
-                Button(onClick = { viewModel.load(active, refresh = true) }, enabled = !state.loading) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", Modifier.size(18.dp))
+                OutlinedButton(onClick = { viewModel.load(active, refresh = true) }, enabled = !state.loading) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", Modifier.size(16.dp))
                 }
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
         TvSearchField(
             query = query,
             onQueryChange = { query = it },
             onSearch = {},
             placeholder = "Search channels…",
-            modifier = Modifier.fillMaxWidth(0.5f),
+            modifier = Modifier.fillMaxWidth(0.42f),
         )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "OK plays a channel  ·  long-press OK to favourite it",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(16.dp))
 
         val error = state.error
         when {
@@ -191,11 +193,18 @@ fun LiveScreen(viewModel: LiveViewModel) {
             else -> {
                 val group = selectedGroup
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Button(onClick = { selectedGroup = null }) { Text("← Groups") }
-                    Spacer(Modifier.width(12.dp))
+                    OutlinedButton(onClick = { selectedGroup = null }) { Text("Groups") }
+                    Spacer(Modifier.width(14.dp))
                     Text(
                         group?.ifBlank { "Ungrouped" }.orEmpty(),
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        "Hold OK to favourite a channel",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Spacer(Modifier.height(12.dp))

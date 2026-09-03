@@ -46,7 +46,7 @@ fun LiveSetupScreen(factory: ArcTvViewModelFactory, onDone: () -> Unit) {
             Text(
                 "Step 2 of 2",
                 style = MaterialTheme.typography.labelLarge,
-                color = ArcBlue,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(6.dp))
             Text(

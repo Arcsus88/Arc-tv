@@ -363,7 +363,10 @@ private fun HeroBanner(
     }
     val backdrop = art["${item.type}:${item.id}"].orEmpty().ifBlank { item.backdrop }
 
-    Box(Modifier.fillMaxWidth().height(408.dp)) {
+    // The billboard takes the whole first screen, Sky Glass-style: artwork
+    // edge to edge, the title block in the top-left, and the first rail of
+    // posters riding the fade at the foot. Rows below scroll up over it.
+    Box(Modifier.fillMaxWidth().height(HERO_HEIGHT)) {
         if (backdrop.isNotBlank()) {
             AsyncImage(
                 model = backdrop,
@@ -384,8 +387,8 @@ private fun HeroBanner(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
                     0f to Color.Transparent,
-                    0.32f to Color.Transparent,
-                    0.62f to ArcBackground.copy(alpha = 0.86f),
+                    0.38f to Color.Transparent,
+                    0.7f to ArcBackground.copy(alpha = 0.88f),
                     1f to ArcBackground,
                 ),
             ),
@@ -393,8 +396,9 @@ private fun HeroBanner(
         Box(
             Modifier.fillMaxSize().background(
                 Brush.horizontalGradient(
-                    0f to ArcBackground.copy(alpha = 0.8f),
-                    0.5f to Color.Transparent,
+                    0f to ArcBackground.copy(alpha = 0.92f),
+                    0.42f to ArcBackground.copy(alpha = 0.55f),
+                    0.68f to Color.Transparent,
                 ),
             ),
         )
@@ -413,7 +417,7 @@ private fun HeroBanner(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .fillMaxWidth()
-                .height(212.dp)
+                .height(HERO_INFO_HEIGHT)
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (event.key) {
@@ -431,25 +435,7 @@ private fun HeroBanner(
                     }
                 },
         ) {
-            Column(Modifier.padding(start = 40.dp, top = 18.dp, end = 40.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "TRENDING",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = ArcBlue,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .background(ArcBlue.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        "${index + 1} / ${items.size}   \u2039 \u203a browse   \u00b7   OK for details",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White.copy(alpha = 0.75f),
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
+            Column(Modifier.padding(start = 40.dp, top = 36.dp, end = 40.dp)) {
                 Text(
                     item.title,
                     style = MaterialTheme.typography.displaySmall,
@@ -460,23 +446,39 @@ private fun HeroBanner(
                     modifier = Modifier.fillMaxWidth(0.62f),
                 )
                 if (item.year.isNotBlank()) {
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         item.year + (if (item.isTv) "  \u00b7  Series" else "  \u00b7  Film"),
                         style = MaterialTheme.typography.titleSmall,
-                        color = ArcBlue,
+                        color = Color.White.copy(alpha = 0.7f),
                     )
                 }
                 if (item.overview.isNotBlank()) {
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         item.overview,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.82f),
+                        color = Color.White.copy(alpha = 0.84f),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth(0.5f),
                     )
+                }
+                Spacer(Modifier.height(14.dp))
+                // Where you are in the billboard: quiet dots, the current one
+                // a short white bar. Left/right on the D-pad moves along it.
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    items.forEachIndexed { i, _ ->
+                        Box(
+                            Modifier
+                                .height(4.dp)
+                                .width(if (i == index) 22.dp else 6.dp)
+                                .background(
+                                    Color.White.copy(alpha = if (i == index) 0.95f else 0.32f),
+                                    RoundedCornerShape(2.dp),
+                                ),
+                        )
+                    }
                 }
             }
         }
@@ -485,11 +487,11 @@ private fun HeroBanner(
         Column(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(bottom = 4.dp)) {
             Text(
                 rowTitle,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = 40.dp),
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 contentPadding = PaddingValues(horizontal = 40.dp, vertical = 12.dp),
@@ -592,7 +594,7 @@ private fun DiscoverGrid(viewModel: BrowseViewModel) {
             Column(Modifier.fillMaxSize()) {
                 // Passed as a lambda, not a value: read here, every tile you
                 // moved onto recomposed the whole grid scope.
-                FocusDetailHeader { focusedItem }
+                FocusDetailHeader { focusedItem ?: state.discoverItems.firstOrNull() }
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(4),
                     state = gridState,
@@ -641,7 +643,7 @@ private fun FocusDetailHeader(focused: () -> CatalogItem?) {
                     if (item.isTv) "Series" else "Film",
                 ).joinToString("  ·  "),
                 style = MaterialTheme.typography.labelLarge,
-                color = ArcBlue,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         if (item.overview.isNotBlank()) {
@@ -680,6 +682,10 @@ private fun SearchResults(results: List<CatalogItem>, searching: Boolean, viewMo
 /** Row closer in the style of Sky's "More Top Picks" tile. */
 /** Poster tile width in rows; the grids size theirs from their columns. */
 private val POSTER_WIDTH = 168.dp
+
+/** The billboard fills the first screen (540dp minus the overscan inset). */
+private val HERO_HEIGHT = 486.dp
+private val HERO_INFO_HEIGHT = 186.dp
 
 @Composable
 private fun MoreTile(tv: Boolean, onClick: () -> Unit) {
