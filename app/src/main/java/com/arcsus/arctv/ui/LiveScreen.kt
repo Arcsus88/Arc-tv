@@ -164,7 +164,12 @@ fun LiveScreen(viewModel: LiveViewModel) {
                         }
                     }
                     items(state.groups, key = { it.name }) { group ->
-                        Card(onClick = { selectedGroup = group.name }) {
+                        Card(
+                            onClick = {
+                                viewModel.openGroup(group.name)
+                                selectedGroup = group.name
+                            },
+                        ) {
                             Column(Modifier.padding(16.dp)) {
                                 Text(
                                     group.name.ifBlank { "Ungrouped" },
@@ -173,7 +178,7 @@ fun LiveScreen(viewModel: LiveViewModel) {
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
-                                    "${group.count} channels",
+                                    if (group.count == 0) "Open to load" else "${group.count} channels",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -201,7 +206,13 @@ fun LiveScreen(viewModel: LiveViewModel) {
                 } else {
                     state.channels.filter { it.group == group }
                 }
-                ChannelGrid(channels, state.favoriteUrls, play, viewModel::toggleFavorite)
+                if (channels.isEmpty() && state.groupLoading == group) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Loading channels…", style = MaterialTheme.typography.titleMedium)
+                    }
+                } else {
+                    ChannelGrid(channels, state.favoriteUrls, play, viewModel::toggleFavorite)
+                }
             }
         }
     }
