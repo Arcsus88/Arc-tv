@@ -10,7 +10,7 @@ import com.arcsus.arctv.data.RdRepository
 import com.arcsus.arctv.data.SettingsStore
 import com.arcsus.arctv.data.TokenStore
 
-class ArcTvApp : Application() {
+class ArcTvApp : Application(), coil.ImageLoaderFactory {
 
     lateinit var tokenStore: TokenStore
         private set
@@ -31,6 +31,7 @@ class ArcTvApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashLog.install(this)
         tokenStore = TokenStore(this)
         rdClient = RdClient(tokenStore)
         repository = RdRepository(rdClient, tokenStore)
@@ -40,4 +41,17 @@ class ArcTvApp : Application() {
         liveRepository = LiveRepository()
         browseRepository = BrowseRepository(tokenStore, settingsStore, allDebridRepository)
     }
+
+    /**
+     * Artwork loader tuned for a television: TVs have far less RAM than
+     * phones and a grid of posters plus a hero backdrop adds up fast. RGB565
+     * halves each bitmap, and the memory cache is capped well below Coil's
+     * default share of the heap.
+     */
+    override fun newImageLoader(): coil.ImageLoader =
+        coil.ImageLoader.Builder(this)
+            .allowRgb565(true)
+            .memoryCache { coil.memory.MemoryCache.Builder(this).maxSizePercent(0.12).build() }
+            .respectCacheHeaders(false)
+            .build()
 }

@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -18,6 +20,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
 import com.arcsus.arctv.ui.ArcTvViewModelFactory
 import com.arcsus.arctv.ui.AuthScreen
+import com.arcsus.arctv.ui.CrashDialog
 import com.arcsus.arctv.ui.AuthViewModel
 import com.arcsus.arctv.ui.HomeScreen
 import com.arcsus.arctv.ui.LiveSetupScreen
@@ -33,9 +36,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as ArcTvApp
+        val lastCrash = CrashLog.consume(this)?.let { CrashLog.summarise(it) }
         setContent {
             ArcTvTheme {
                 val factory = remember { ArcTvViewModelFactory(app) }
+                var crashSummary by remember { mutableStateOf(lastCrash) }
+                crashSummary?.let { CrashDialog(it) { crashSummary = null } }
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     colors = SurfaceDefaults.colors(
