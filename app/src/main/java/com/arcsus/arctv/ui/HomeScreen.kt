@@ -58,6 +58,9 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.arcsus.arctv.ui.theme.ArcBlue
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.runtime.rememberCoroutineScope
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -123,6 +126,17 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         openSection(proposedTab)
     }
 
+    // Focus recovery. When the focused element is removed from the screen --
+    // a group grid replaced by its channel grid, a picker closing, a list
+    // refetched -- Compose clears focus, and the next key press starts a
+    // fresh search that lands on the rail, whose open-on-rest then opens a
+    // section: "I pressed Favourites and it sent me Home". A deliberate move
+    // to the rail lands there within the same frame; if nothing has focus a
+    // moment after the content lost it, bring focus back into the content.
+    var railHasFocus by remember { mutableStateOf(false) }
+    val contentFocus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+
     val liveState by liveViewModel.state.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -133,6 +147,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         NavRail(
             tabs = tabs,
             selected = selectedTab,
+            onFocusChanged = { railHasFocus = it },
             onSelect = { index ->
                 proposedTab = index
                 openSection(index)
@@ -155,6 +170,15 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
             Modifier
                 .weight(1f)
                 .padding(top = 0.dp, end = TV_INSET_H)
+                .focusRequester(contentFocus)
+                .onFocusChanged { state ->
+                    if (!state.hasFocus) {
+                        scope.launch {
+                            delay(80)
+                            if (!railHasFocus) runCatching { contentFocus.requestFocus() }
+                        }
+                    }
+                }
                 // Up/down stays inside the content. Without this, a DPAD-down
                 // that finds nothing focusable below it -- a grid still
                 // reloading after picking a genre, say -- lets focus fall
@@ -190,6 +214,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
 private fun NavRail(
     tabs: List<String>,
     selected: Int,
+    onFocusChanged: (Boolean) -> Unit,
     onSelect: (Int) -> Unit,
     onPreview: (Int) -> Unit,
     onSearch: () -> Unit,
@@ -216,7 +241,10 @@ private fun NavRail(
             .fillMaxHeight()
             .width(railWidth)
             .background(Color.White.copy(alpha = 0.045f))
-            .onFocusChanged { railFocused = it.hasFocus }
+            .onFocusChanged {
+                railFocused = it.hasFocus
+                onFocusChanged(it.hasFocus)
+            }
             .padding(start = TV_INSET_H + 8.dp, end = 10.dp, top = TV_INSET_V + 6.dp, bottom = TV_INSET_V + 6.dp),
     ) {
         // Brand + clock, as Sky puts them: top-left, always.
