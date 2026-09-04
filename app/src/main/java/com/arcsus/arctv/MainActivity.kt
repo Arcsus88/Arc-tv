@@ -5,8 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,10 +25,6 @@ import com.arcsus.arctv.ui.HomeScreen
 import com.arcsus.arctv.ui.LiveSetupScreen
 import com.arcsus.arctv.ui.theme.ArcTvTheme
 import kotlinx.coroutines.launch
-
-/** TV-safe margins (about 5% of a 1080p picture), see the note in onCreate. */
-private val OVERSCAN_HORIZONTAL = 44.dp
-private val OVERSCAN_VERTICAL = 24.dp
 
 class MainActivity : ComponentActivity() {
 
@@ -57,10 +51,9 @@ class MainActivity : ComponentActivity() {
                         app.settingsStore.liveSetupNeeded.collect { value = it }
                     }
                     val scope = rememberCoroutineScope()
-                    // Overscan: most TVs crop the outer few percent of the
-                    // picture, so anything flush with the edge is lost. Android
-                    // TV's guidance is a 5% safe zone; this keeps every screen
-                    // inside it while the background still paints edge to edge.
+                    // The rail runs to the screen edge like Sky's; the safe
+                    // margin (TV_INSET in HomeScreen) is applied to contents,
+                    // not to the panels themselves.
                     Box(
                         Modifier
                             .fillMaxSize()
@@ -78,10 +71,6 @@ class MainActivity : ComponentActivity() {
                                     end = androidx.compose.ui.geometry.Offset.Infinite,
                                 ),
                             )
-                            .padding(
-                                horizontal = OVERSCAN_HORIZONTAL,
-                                vertical = OVERSCAN_VERTICAL,
-                            ),
                     ) {
                         when {
                             authorized == null || liveSetupNeeded == null -> Unit // still reading DataStore

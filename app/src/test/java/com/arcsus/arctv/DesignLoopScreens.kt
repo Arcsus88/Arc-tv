@@ -117,7 +117,6 @@ class DesignLoopScreens {
                                 end = androidx.compose.ui.geometry.Offset.Infinite,
                             ),
                         )
-                        .padding(horizontal = 44.dp, vertical = 24.dp),
                 ) { content() }
             }
         }

@@ -69,6 +69,15 @@ import java.util.Locale
  */
 private const val RAIL_SETTLE_MS = 280L
 
+/**
+ * Safe margin between the screen edge and content. Modest: most sets show
+ * the whole picture, and a big inset stacked on each screen's own gutter
+ * left an empty band all the way round. Panels (the rail) run to the edge;
+ * only what's inside them is inset.
+ */
+internal val TV_INSET_H = 20.dp
+internal val TV_INSET_V = 14.dp
+
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun HomeScreen(factory: ArcTvViewModelFactory) {
@@ -145,6 +154,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         Column(
             Modifier
                 .weight(1f)
+                .padding(top = 0.dp, end = TV_INSET_H)
                 // Up/down stays inside the content. Without this, a DPAD-down
                 // that finds nothing focusable below it -- a grid still
                 // reloading after picking a genre, say -- lets focus fall
@@ -191,7 +201,7 @@ private fun NavRail(
     // again the moment focus returns.
     var railFocused by remember { mutableStateOf(false) }
     val railWidth by androidx.compose.animation.core.animateDpAsState(
-        targetValue = if (railFocused) 214.dp else 64.dp,
+        targetValue = (if (railFocused) 214.dp else 64.dp) + TV_INSET_H,
         label = "railWidth",
     )
     val expanded = railFocused
@@ -207,7 +217,7 @@ private fun NavRail(
             .width(railWidth)
             .background(Color.White.copy(alpha = 0.045f))
             .onFocusChanged { railFocused = it.hasFocus }
-            .padding(horizontal = 10.dp, vertical = 16.dp),
+            .padding(start = TV_INSET_H + 8.dp, end = 10.dp, top = TV_INSET_V + 6.dp, bottom = TV_INSET_V + 6.dp),
     ) {
         // Brand + clock, as Sky puts them: top-left, always.
         if (expanded) {
