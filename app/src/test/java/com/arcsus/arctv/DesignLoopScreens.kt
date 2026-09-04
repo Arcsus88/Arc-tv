@@ -1,6 +1,7 @@
 package com.arcsus.arctv
 
 import android.os.Looper
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -10,6 +11,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocusable
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -101,7 +103,22 @@ class DesignLoopScreens {
                     contentColor = MaterialTheme.colorScheme.onBackground,
                 ),
             ) {
-                Box(Modifier.fillMaxSize().padding(horizontal = 44.dp, vertical = 24.dp)) { content() }
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            androidx.compose.ui.graphics.Brush.linearGradient(
+                                colors = listOf(
+                                    androidx.compose.ui.graphics.Color(0xFF17284A),
+                                    androidx.compose.ui.graphics.Color(0xFF0F1A30),
+                                    com.arcsus.arctv.ui.theme.ArcBackground,
+                                ),
+                                start = androidx.compose.ui.geometry.Offset.Zero,
+                                end = androidx.compose.ui.geometry.Offset.Infinite,
+                            ),
+                        )
+                        .padding(horizontal = 44.dp, vertical = 24.dp),
+                ) { content() }
             }
         }
     }
@@ -143,9 +160,11 @@ class DesignLoopScreens {
     private fun focus(text: String): Boolean {
         val byName = runCatching { rule.onNodeWithText(text).requestFocus() }.isSuccess
         if (!byName) {
-            // Merged tree: the focusable Surface carries its label's text.
-            val ok = runCatching { rule.onNodeWithText(text.take(1)).requestFocus() }.isSuccess
-            println("design-loop: focus '$text' by initial -> $ok")
+            // Closed rail shows icons; their content descriptions carry the title.
+            val ok = runCatching {
+                rule.onNodeWithContentDescription(text, useUnmergedTree = false).requestFocus()
+            }.isSuccess || runCatching { rule.onNodeWithText(text.take(1)).requestFocus() }.isSuccess
+            println("design-loop: focus '$text' by icon/initial -> $ok")
             if (!ok) return false
         }
         settle(1_200)

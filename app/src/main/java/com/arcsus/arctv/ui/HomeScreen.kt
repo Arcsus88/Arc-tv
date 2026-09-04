@@ -15,7 +15,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.ListAlt
+import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -178,15 +186,15 @@ private fun NavRail(
     preview: com.arcsus.arctv.data.SavedChannel?,
     onPreviewClick: (com.arcsus.arctv.data.SavedChannel) -> Unit,
 ) {
-    // Sky Glass behaviour: the rail slims down to initials while you're in
-    // the content, expanding as soon as focus lands back on it.
+    // Sky Q's rail, top to bottom: brand and clock, the live preview tile,
+    // the menu. It slims to icons while focus is in the content and opens
+    // again the moment focus returns.
     var railFocused by remember { mutableStateOf(false) }
     val railWidth by androidx.compose.animation.core.animateDpAsState(
-        targetValue = if (railFocused) 206.dp else 58.dp,
+        targetValue = if (railFocused) 214.dp else 64.dp,
         label = "railWidth",
     )
     val expanded = railFocused
-    // Live clock and date, Sky-style ("Monday \u00b7 19:11") at the rail's foot.
     val time by produceState(initialValue = clockNow()) {
         while (true) {
             value = clockNow()
@@ -197,28 +205,64 @@ private fun NavRail(
         Modifier
             .fillMaxHeight()
             .width(railWidth)
-            .background(Color(0xFF0E1520))
+            .background(Color.White.copy(alpha = 0.045f))
             .onFocusChanged { railFocused = it.hasFocus }
-            .padding(horizontal = 10.dp, vertical = 18.dp),
+            .padding(horizontal = 10.dp, vertical = 16.dp),
     ) {
+        // Brand + clock, as Sky puts them: top-left, always.
+        if (expanded) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            ) {
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = ArcBlue, fontWeight = FontWeight.Bold)) { append("Arc") }
+                        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(" TV") }
+                    },
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    time,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White.copy(alpha = 0.85f),
+                )
+            }
+        } else {
+            Text(
+                "A",
+                style = MaterialTheme.typography.titleLarge,
+                color = ArcBlue,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+
         // Sky's preview slot: the first favourite channel, one press to play.
         // (A live video preview would hold the IPTV panel's single allowed
         // connection hostage, so artwork stands in for the tuner picture.)
         if (expanded && preview != null) {
             androidx.tv.material3.Card(
                 onClick = { onPreviewClick(preview) },
-                modifier = Modifier.fillMaxWidth().height(96.dp),
+                shape = androidx.tv.material3.CardDefaults.shape(RoundedCornerShape(6.dp)),
+                scale = androidx.tv.material3.CardDefaults.scale(focusedScale = 1.03f),
+                border = androidx.tv.material3.CardDefaults.border(
+                    focusedBorder = Border(BorderStroke(2.dp, Color.White), shape = RoundedCornerShape(6.dp)),
+                ),
+                modifier = Modifier.fillMaxWidth().height(106.dp),
             ) {
                 Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant)) {
                     if (preview.logo.isNotBlank()) {
                         coil.compose.AsyncImage(
                             model = preview.logo,
                             contentDescription = null,
-                            modifier = Modifier.size(44.dp).align(Alignment.Center),
+                            modifier = Modifier.size(48.dp).align(Alignment.Center),
                         )
                     } else {
                         Text(
-                            preview.name.trim().firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "\u2022",
+                            preview.name.trim().firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "•",
                             style = MaterialTheme.typography.headlineSmall,
                             color = ArcBlue,
                             fontWeight = FontWeight.Bold,
@@ -226,21 +270,11 @@ private fun NavRail(
                         )
                     }
                     Text(
-                        "LIVE",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(6.dp)
-                            .background(Color(0xFFD64545), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 5.dp, vertical = 1.dp),
-                    )
-                    Text(
                         preview.name,
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White,
                         maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         modifier = Modifier
                             .align(Alignment.BottomStart)
                             .fillMaxWidth()
@@ -254,88 +288,73 @@ private fun NavRail(
         tabs.forEachIndexed { index, title ->
             RailItem(
                 title = title,
+                icon = railIcon(title),
                 selected = index == selected,
                 onActivate = { onSelect(index) },
                 onFocused = { onPreview(index) },
                 subdued = title == "Settings",
                 expanded = expanded,
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
         }
         Spacer(Modifier.weight(1f))
         RailItem(
             title = "Search",
+            icon = Icons.Default.Search,
             selected = false,
             onActivate = onSearch,
-            icon = Icons.Default.Search,
             expanded = expanded,
+            showIconExpanded = true,
         )
-        Spacer(Modifier.height(16.dp))
-        if (expanded) {
-            Column(Modifier.padding(horizontal = 8.dp)) {
-                Text(
-                    buildAnnotatedString {
-                        withStyle(SpanStyle(color = ArcBlue, fontWeight = FontWeight.Bold)) {
-                            append("Arc")
-                        }
-                        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(" TV") }
-                    },
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    "${time.second} \u00b7 ${time.first}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            Text(
-                "A",
-                style = MaterialTheme.typography.titleLarge,
-                color = ArcBlue,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
-        }
     }
 }
 
+/** The icon each section shows while the rail is closed. */
+private fun railIcon(title: String): ImageVector = when (title) {
+    "Browse" -> Icons.Default.Home
+    "Movies" -> Icons.Default.Movie
+    "TV Shows" -> Icons.Default.Tv
+    "Live" -> Icons.Default.LiveTv
+    "Guide" -> Icons.Default.ListAlt
+    "Downloads" -> Icons.Default.Download
+    "Torrents" -> Icons.Default.CloudDownload
+    "Settings" -> Icons.Default.Settings
+    else -> Icons.Default.Search
+}
+
 /**
- * One rail entry, Sky-style: the active section sits in a white box with dark
- * text; focus fills the accent. [onFocused] reports that focus has arrived --
- * the caller decides when that becomes a section change -- while OK activates
- * straight away.
+ * One rail entry. Sky Q's highlight is a translucent light box on the blue
+ * ground: the section you're in keeps it; focus brightens it and adds a
+ * fine keyline. [onFocused] reports that focus has arrived -- the caller
+ * decides when that becomes a section change -- while OK activates at once.
  */
 @Composable
 private fun RailItem(
     title: String,
+    icon: ImageVector,
     selected: Boolean,
     onActivate: () -> Unit,
     onFocused: (() -> Unit)? = null,
-    icon: ImageVector? = null,
     subdued: Boolean = false,
     expanded: Boolean = true,
+    showIconExpanded: Boolean = false,
 ) {
-    // Sky Q's signature: the section you're in sits in a solid white box.
-    // Focus is a white keyline (with a faint fill) -- it becomes the white
-    // box itself a moment later, when the section opens.
     val shape = RoundedCornerShape(6.dp)
     Surface(
         onClick = onActivate,
         shape = ClickableSurfaceDefaults.shape(shape),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) Color.White else Color.Transparent,
-            focusedContainerColor = if (selected) Color.White else Color.White.copy(alpha = 0.10f),
+            containerColor = if (selected) Color.White.copy(alpha = 0.20f) else Color.Transparent,
+            focusedContainerColor = Color.White.copy(alpha = if (selected) 0.32f else 0.22f),
             contentColor = when {
-                selected -> Color(0xFF0B0F15)
-                subdued -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                selected -> Color.White
+                subdued -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                else -> Color.White.copy(alpha = 0.86f)
             },
-            focusedContentColor = if (selected) Color(0xFF0B0F15) else Color.White,
+            focusedContentColor = Color.White,
         ),
         border = ClickableSurfaceDefaults.border(
-            focusedBorder = Border(BorderStroke(1.5.dp, Color.White), shape = shape),
+            focusedBorder = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)), shape = shape),
         ),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         modifier = Modifier
@@ -345,39 +364,29 @@ private fun RailItem(
         if (expanded) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             ) {
-                if (icon != null) {
-                    Icon(icon, contentDescription = null, Modifier.size(16.dp))
+                if (showIconExpanded) {
+                    Icon(icon, contentDescription = null, Modifier.size(17.dp))
                     Spacer(Modifier.width(10.dp))
                 }
                 Text(
                     title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 )
             }
         } else {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 13.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
             ) {
-                if (icon != null) {
-                    Icon(icon, contentDescription = title, Modifier.size(16.dp))
-                } else {
-                    Text(
-                        title.take(1),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                    )
-                }
+                Icon(icon, contentDescription = title, Modifier.size(21.dp))
             }
         }
     }
 }
 
-private fun clockNow(): Pair<String, String> {
-    val now = Date()
-    return SimpleDateFormat("HH:mm", Locale.getDefault()).format(now) to
-        SimpleDateFormat("EEEE", Locale.getDefault()).format(now)
-}
+/** Sky's clock: "7.11pm". */
+private fun clockNow(): String =
+    SimpleDateFormat("h.mma", Locale.UK).format(Date()).lowercase(Locale.UK)

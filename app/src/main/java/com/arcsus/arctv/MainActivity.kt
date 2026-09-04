@@ -3,6 +3,7 @@ package com.arcsus.arctv
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
@@ -63,6 +64,20 @@ class MainActivity : ComponentActivity() {
                     Box(
                         Modifier
                             .fillMaxSize()
+                            // Sky Q sits on a blue gradient rather than flat
+                            // black; Arc's version runs deep blue at the top
+                            // left down to the navy ground.
+                            .background(
+                                androidx.compose.ui.graphics.Brush.linearGradient(
+                                    colors = listOf(
+                                        androidx.compose.ui.graphics.Color(0xFF17284A),
+                                        androidx.compose.ui.graphics.Color(0xFF0F1A30),
+                                        com.arcsus.arctv.ui.theme.ArcBackground,
+                                    ),
+                                    start = androidx.compose.ui.geometry.Offset.Zero,
+                                    end = androidx.compose.ui.geometry.Offset.Infinite,
+                                ),
+                            )
                             .padding(
                                 horizontal = OVERSCAN_HORIZONTAL,
                                 vertical = OVERSCAN_VERTICAL,

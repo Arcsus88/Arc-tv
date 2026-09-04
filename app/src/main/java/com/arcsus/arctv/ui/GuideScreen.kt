@@ -247,7 +247,7 @@ private fun GuideGroupItem(label: String, selected: Boolean, onActivate: () -> U
         onClick = onActivate,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) Color.White else Color.Transparent,
+            containerColor = if (selected) Color.White.copy(alpha = 0.22f) else Color.Transparent,
             focusedContainerColor = ArcBlue,
             contentColor = if (selected) Color(0xFF0B0F15)
             else MaterialTheme.colorScheme.onSurfaceVariant,

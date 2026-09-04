@@ -49,6 +49,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -302,8 +305,8 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
             Column {
                 Text(
                     row.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(horizontal = 40.dp),
                 )
                 Spacer(Modifier.height(10.dp))
@@ -312,7 +315,7 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
                     contentPadding = PaddingValues(horizontal = 40.dp, vertical = 12.dp),
                 ) {
                     items(row.items, key = { it.type + it.id }) { item ->
-                        WideTile(item, Modifier.width(POSTER_WIDTH)) { viewModel.openDetails(item) }
+                        LandscapeTile(item, Modifier.width(LANDSCAPE_WIDTH)) { viewModel.openDetails(item) }
                     }
                     // Sky's "More Top Picks" closer: jumps to the full catalogue.
                     val moreType = row.items.firstOrNull()?.type
@@ -372,7 +375,27 @@ private fun HeroBanner(
                 model = backdrop,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    .drawWithContent {
+                        drawContent()
+                        // Keep the art where the mask is opaque; let the page
+                        // gradient show through at the foot and the left.
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                0f to Color.Black, 0.4f to Color.Black, 1f to Color.Transparent,
+                            ),
+                            blendMode = BlendMode.DstIn,
+                        )
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                0f to Color.Black.copy(alpha = 0.08f), 0.38f to Color.Black.copy(alpha = 0.55f),
+                                0.7f to Color.Black,
+                            ),
+                            blendMode = BlendMode.DstIn,
+                        )
+                    },
             )
         } else {
             Box(
@@ -381,28 +404,6 @@ private fun HeroBanner(
                 ),
             )
         }
-        // Legibility scrims: fade into the page below the info block so the
-        // overlaid row reads cleanly; darken the left edge behind the text.
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    0f to Color.Transparent,
-                    0.38f to Color.Transparent,
-                    0.7f to ArcBackground.copy(alpha = 0.88f),
-                    1f to ArcBackground,
-                ),
-            ),
-        )
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(
-                    0f to ArcBackground.copy(alpha = 0.92f),
-                    0.42f to ArcBackground.copy(alpha = 0.55f),
-                    0.68f to Color.Transparent,
-                ),
-            ),
-        )
-
         Surface(
             onClick = { onOpen(item) },
             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(0.dp)),
@@ -488,7 +489,7 @@ private fun HeroBanner(
             Text(
                 rowTitle,
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Medium,
                 modifier = Modifier.padding(horizontal = 40.dp),
             )
             Spacer(Modifier.height(4.dp))
@@ -497,7 +498,7 @@ private fun HeroBanner(
                 contentPadding = PaddingValues(horizontal = 40.dp, vertical = 12.dp),
             ) {
                 items(rowItems, key = { it.type + it.id }) { rowItem ->
-                    WideTile(rowItem, Modifier.width(POSTER_WIDTH)) { onOpen(rowItem) }
+                    LandscapeTile(rowItem, Modifier.width(LANDSCAPE_WIDTH)) { onOpen(rowItem) }
                 }
                 val moreType = rowItems.firstOrNull()?.type
                 if (moreType != null && !rowTitle.startsWith("\u2665")) {
@@ -683,6 +684,72 @@ private fun SearchResults(results: List<CatalogItem>, searching: Boolean, viewMo
 /** Poster tile width in rows; the grids size theirs from their columns. */
 private val POSTER_WIDTH = 168.dp
 
+/** Sky Q's home rails use landscape tiles: about four across the content. */
+private val LANDSCAPE_WIDTH = 236.dp
+
+/**
+ * A Sky Q "top picks" tile: 16:9 artwork, a small badge and the title in
+ * the bottom-left over a scrim, a white outline on focus.
+ */
+@Composable
+private fun LandscapeTile(item: CatalogItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(6.dp)
+    Card(
+        onClick = onClick,
+        shape = CardDefaults.shape(shape),
+        scale = CardDefaults.scale(focusedScale = 1.06f),
+        border = CardDefaults.border(
+            focusedBorder = Border(BorderStroke(2.5.dp, Color.White), shape = shape),
+        ),
+        modifier = modifier,
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(item.backdrop.ifBlank { item.poster })
+                    .crossfade(180)
+                    .build(),
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .background(
+                        Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.86f))),
+                    ),
+            )
+            Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 10.dp, vertical = 8.dp)) {
+                Text(
+                    if (item.isTv) "Series" else "Film",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(3.dp))
+                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
 /** The billboard fills the first screen (540dp minus the overscan inset). */
 private val HERO_HEIGHT = 486.dp
 private val HERO_INFO_HEIGHT = 186.dp
@@ -697,13 +764,13 @@ private fun MoreTile(tv: Boolean, onClick: () -> Unit) {
         border = CardDefaults.border(
             focusedBorder = Border(BorderStroke(2.dp, Color.White), shape = shape),
         ),
-        modifier = Modifier.width(POSTER_WIDTH),
+        modifier = Modifier.width(LANDSCAPE_WIDTH),
     ) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(2f / 3f)
+                .aspectRatio(16f / 9f)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {

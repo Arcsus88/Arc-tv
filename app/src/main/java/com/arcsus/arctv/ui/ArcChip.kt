@@ -34,14 +34,14 @@ fun TextChip(
     Surface(
         onClick = onClick,
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) Color.White else Color.Transparent,
-            focusedContainerColor = if (selected) Color.White else Color.White.copy(alpha = 0.10f),
-            contentColor = if (selected) Color(0xFF0B0F15) else MaterialTheme.colorScheme.onSurfaceVariant,
-            focusedContentColor = if (selected) Color(0xFF0B0F15) else Color.White,
+            containerColor = if (selected) Color.White.copy(alpha = 0.22f) else Color.Transparent,
+            focusedContainerColor = Color.White.copy(alpha = if (selected) 0.32f else 0.16f),
+            contentColor = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+            focusedContentColor = Color.White,
         ),
         border = ClickableSurfaceDefaults.border(
             focusedBorder = androidx.tv.material3.Border(
-                androidx.compose.foundation.BorderStroke(1.5.dp, Color.White),
+                androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)),
                 shape = shape,
             ),
         ),
@@ -72,14 +72,14 @@ fun ArcChip(
     Surface(
         onClick = onClick,
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) Color.White else MaterialTheme.colorScheme.surfaceVariant,
-            focusedContainerColor = if (selected) Color.White else MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = if (selected) Color(0xFF0B0F15) else MaterialTheme.colorScheme.onSurface,
-            focusedContentColor = if (selected) Color(0xFF0B0F15) else Color.White,
+            containerColor = if (selected) Color.White.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.06f),
+            focusedContainerColor = Color.White.copy(alpha = if (selected) 0.32f else 0.16f),
+            contentColor = Color.White,
+            focusedContentColor = Color.White,
         ),
         border = ClickableSurfaceDefaults.border(
             focusedBorder = androidx.tv.material3.Border(
-                androidx.compose.foundation.BorderStroke(1.5.dp, Color.White),
+                androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)),
                 shape = shape,
             ),
         ),
