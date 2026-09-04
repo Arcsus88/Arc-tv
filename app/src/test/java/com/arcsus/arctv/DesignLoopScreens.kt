@@ -14,7 +14,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
@@ -49,6 +51,7 @@ import java.io.File
  * Needs ARC_AD_KEY (AllDebrid key) in the environment; the IPTV playlist is
  * optional (ARC_IPTV_URL / ARC_IPTV_USER / ARC_IPTV_PASS).
  */
+@OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w960dp-h540dp-land-television-notnight-xhdpi")
@@ -150,24 +153,38 @@ class DesignLoopScreens {
         println("design-loop: captured $name")
     }
 
+    private fun key(k: androidx.compose.ui.input.key.Key) {
+        rule.onRoot().performKeyInput { pressKey(k) }
+        settle(120)
+    }
+
+    private fun isFocused(text: String): Boolean =
+        rule.onAllNodes(hasText(text) and androidx.compose.ui.test.isFocused()).fetchSemanticsNodes().isNotEmpty()
+
     /**
-     * Focus a rail section. The rail collapses to initials when focus is in
-     * the content, so the full name may not exist yet: fall back to the
-     * initial (unique per section), which expands the rail, then settle long
-     * enough for the 280ms open-on-rest to fire.
+     * Open a rail section the way a viewer does: LEFT out of the content,
+     * UP to the top of the rail, DOWN until the item has focus, then OK.
+     * Focus placed on the rail any other way is treated as the platform's
+     * doing and sent back into the content, so a plain requestFocus won't do.
      */
     private fun focus(text: String): Boolean {
-        val byName = runCatching { rule.onNodeWithText(text).requestFocus() }.isSuccess
-        if (!byName) {
-            // Closed rail shows icons; their content descriptions carry the title.
-            val ok = runCatching {
-                rule.onNodeWithContentDescription(text, useUnmergedTree = false).requestFocus()
-            }.isSuccess || runCatching { rule.onNodeWithText(text.take(1)).requestFocus() }.isSuccess
-            println("design-loop: focus '$text' by icon/initial -> $ok")
-            if (!ok) return false
-        }
+        key(androidx.compose.ui.input.key.Key.DirectionLeft)
+        repeat(8) { if (!isFocused(text)) key(androidx.compose.ui.input.key.Key.DirectionUp) }
+        repeat(10) { if (!isFocused(text)) key(androidx.compose.ui.input.key.Key.DirectionDown) }
+        val reached = isFocused(text)
+        println("design-loop: rail '$text' reached=$reached")
+        if (!reached) return false
+        key(androidx.compose.ui.input.key.Key.DirectionCenter)
         settle(1_200)
         return true
+    }
+
+    /** Focus a node and press OK -- tv-material3 controls ignore touch. */
+    private fun press(node: androidx.compose.ui.test.SemanticsNodeInteraction) {
+        node.requestFocus()
+        settle(150)
+        node.performKeyInput { pressKey(androidx.compose.ui.input.key.Key.DirectionCenter) }
+        settle(150)
     }
 
     @Test
@@ -204,7 +221,7 @@ class DesignLoopScreens {
             // Pick a UK group if the picker is showing.
             val uk = rule.onAllNodes(hasText("ENTERTAINMENT", substring = true) and hasClickAction())
             if (uk.fetchSemanticsNodes().isNotEmpty()) {
-                uk[0].performClick()
+                press(uk[0])
                 settle(12_000)
                 snap("07-guide-group")
             }
@@ -228,7 +245,7 @@ class DesignLoopScreens {
         settle(800)
         snap("10-live-setup")
         runCatching {
-            rule.onNodeWithText("Show code").performClick()
+            press(rule.onNodeWithText("Show code"))
             waitForText("enter the code", 20_000)
             settle(1_500)
             snap("11-live-setup-code")

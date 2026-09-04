@@ -42,6 +42,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -71,6 +78,44 @@ import java.util.Locale
  * stopping on one feels immediate.
  */
 private const val RAIL_SETTLE_MS = 280L
+
+/** A D-pad press older than this cannot be the reason focus arrived somewhere. */
+private const val DELIBERATE_NS = 600_000_000L
+
+/** How long after the content lost focus a landing on the rail counts as stray. */
+private const val STRAY_NS = 1_500_000_000L
+
+/**
+ * Where focus was when the last D-pad press happened. Focus can arrive on the
+ * rail for two very different reasons: the viewer moved there (LEFT out of
+ * the content, or UP/DOWN along the rail), or the platform put it there
+ * because whatever was focused vanished -- a pressed group card removed with
+ * its grid, a list refetched. Android TVs are not in touch mode, so the
+ * moment the focused view goes, View.clearFocus hands focus to the first
+ * focusable on screen: the rail's top item. Only the first kind is a reason
+ * to change section.
+ */
+private class NavIntent {
+    private var at = 0L
+    private var key: Key? = null
+    private var fromRail = false
+    private var fromContent = false
+
+    fun record(pressed: Key, railHadFocus: Boolean, contentHadFocus: Boolean) {
+        at = System.nanoTime()
+        key = pressed
+        fromRail = railHadFocus
+        fromContent = contentHadFocus
+    }
+
+    /** True if a rail item gaining focus right now is the viewer's doing. */
+    fun deliberateRailMove(): Boolean {
+        if (at == 0L) return false
+        val age = System.nanoTime() - at
+        if (age !in 0..DELIBERATE_NS) return false
+        return fromRail || (key == Key.DirectionLeft && fromContent)
+    }
+}
 
 /**
  * Safe margin between the screen edge and content. Modest: most sets show
@@ -119,23 +164,38 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
             "TV Shows" -> browseViewModel.setTab(BrowseTab.TV)
         }
     }
+    var railHasFocus by remember { mutableStateOf(false) }
+    var contentHasFocus by remember { mutableStateOf(false) }
+    var contentLostFocusAt by remember { mutableLongStateOf(0L) }
+    val nav = remember { NavIntent() }
+    val contentFocus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
+
     var proposedTab by remember { mutableIntStateOf(-1) }
     LaunchedEffect(proposedTab) {
         if (proposedTab < 0 || proposedTab == selectedTab) return@LaunchedEffect
         delay(RAIL_SETTLE_MS)
-        openSection(proposedTab)
+        // Still resting there? Focus that has since gone back into the
+        // content -- by the viewer, or by the recovery below -- withdraws
+        // the proposal.
+        if (railHasFocus) openSection(proposedTab)
     }
 
-    // Focus recovery. When the focused element is removed from the screen --
-    // a group grid replaced by its channel grid, a picker closing, a list
-    // refetched -- Compose clears focus, and the next key press starts a
-    // fresh search that lands on the rail, whose open-on-rest then opens a
-    // section: "I pressed Favourites and it sent me Home". A deliberate move
-    // to the rail lands there within the same frame; if nothing has focus a
-    // moment after the content lost it, bring focus back into the content.
-    var railHasFocus by remember { mutableStateOf(false) }
-    val contentFocus = remember { FocusRequester() }
-    val scope = rememberCoroutineScope()
+    // A rail item took focus. Only a D-pad move counts as a proposal (see
+    // NavIntent). Focus the platform pushed onto the rail because the
+    // focused element vanished -- "I pressed Favourites and it sent me
+    // Home" -- goes back into the content, once the screen that lost it has
+    // had a couple of frames to place it itself.
+    val onRailItemFocused: (Int) -> Unit = { index ->
+        if (nav.deliberateRailMove()) {
+            proposedTab = index
+        } else if (contentLostFocusAt != 0L && System.nanoTime() - contentLostFocusAt in 0..STRAY_NS) {
+            scope.launch {
+                repeat(3) { withFrameNanos { } }
+                if (!contentHasFocus && railHasFocus) runCatching { contentFocus.requestFocus() }
+            }
+        }
+    }
 
     val liveState by liveViewModel.state.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -143,7 +203,19 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
     // Sky Q layout: a left navigation rail (preview tile, vertical menu with
     // the active section boxed, brand and clock at the foot) and the content
     // filling the rest of the panel.
-    Row(Modifier.fillMaxSize()) {
+    Row(
+        Modifier
+            .fillMaxSize()
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                    when (event.key) {
+                        Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight ->
+                            nav.record(event.key, railHasFocus, contentHasFocus)
+                    }
+                }
+                false
+            },
+    ) {
         NavRail(
             tabs = tabs,
             selected = selectedTab,
@@ -152,7 +224,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
                 proposedTab = index
                 openSection(index)
             },
-            onPreview = { index -> proposedTab = index },
+            onPreview = onRailItemFocused,
             onSearch = {
                 selectedTab = 0
                 searchOpen = true
@@ -172,10 +244,14 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
                 .padding(top = 0.dp, end = TV_INSET_H)
                 .focusRequester(contentFocus)
                 .onFocusChanged { state ->
+                    contentHasFocus = state.hasFocus
                     if (!state.hasFocus) {
+                        contentLostFocusAt = System.nanoTime()
+                        // Nothing took focus at all (touch-mode devices):
+                        // bring it back rather than leave the remote dead.
                         scope.launch {
                             delay(80)
-                            if (!railHasFocus) runCatching { contentFocus.requestFocus() }
+                            if (!railHasFocus && !contentHasFocus) runCatching { contentFocus.requestFocus() }
                         }
                     }
                 }

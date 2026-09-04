@@ -17,10 +17,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +31,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -55,6 +58,24 @@ fun LiveScreen(viewModel: LiveViewModel) {
     val context = LocalContext.current
     var selectedGroup by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
+
+    // Opening a group swaps the group grid for its channels, and "Groups"
+    // swaps them back: the card that was pressed is gone with its grid, and
+    // a TV then throws focus at the first thing on screen -- the rail. Put
+    // it where the viewer expects instead: the first channel (or "Groups"
+    // while they load), and the first group card on the way back.
+    val groupsFocus = remember { FocusRequester() }
+    val firstGroupFocus = remember { FocusRequester() }
+    val firstChannelFocus = remember { FocusRequester() }
+    var shownGroup by remember { mutableStateOf(selectedGroup) }
+    LaunchedEffect(selectedGroup) {
+        if (selectedGroup == shownGroup) return@LaunchedEffect
+        shownGroup = selectedGroup
+        when {
+            selectedGroup == null -> firstGroupFocus.requestFocusWhenReady()
+            !firstChannelFocus.requestFocusWhenReady(frames = 3) -> groupsFocus.requestFocusWhenReady()
+        }
+    }
 
     val play: (LiveChannel) -> Unit = { channel ->
         if (!playVideo(context, channel.url, channel.name)) {
@@ -147,7 +168,10 @@ fun LiveScreen(viewModel: LiveViewModel) {
                 ) {
                     if (state.favorites.isNotEmpty()) {
                         item(key = "__favourites") {
-                            Card(onClick = { selectedGroup = FAV_GROUP }) {
+                            Card(
+                                onClick = { selectedGroup = FAV_GROUP },
+                                modifier = Modifier.focusRequester(firstGroupFocus),
+                            ) {
                                 Column(Modifier.padding(16.dp)) {
                                     Text(
                                         FAV_GROUP,
@@ -165,11 +189,16 @@ fun LiveScreen(viewModel: LiveViewModel) {
                             }
                         }
                     }
-                    items(state.groups, key = { it.name }) { group ->
+                    itemsIndexed(state.groups, key = { _, group -> group.name }) { index, group ->
                         Card(
                             onClick = {
                                 viewModel.openGroup(group.name)
                                 selectedGroup = group.name
+                            },
+                            modifier = if (index == 0 && state.favorites.isEmpty()) {
+                                Modifier.focusRequester(firstGroupFocus)
+                            } else {
+                                Modifier
                             },
                         ) {
                             Column(Modifier.padding(16.dp)) {
@@ -193,7 +222,10 @@ fun LiveScreen(viewModel: LiveViewModel) {
             else -> {
                 val group = selectedGroup
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = { selectedGroup = null }) { Text("Groups") }
+                    OutlinedButton(
+                        onClick = { selectedGroup = null },
+                        modifier = Modifier.focusRequester(groupsFocus),
+                    ) { Text("Groups") }
                     Spacer(Modifier.width(14.dp))
                     Text(
                         group?.ifBlank { "Ungrouped" }.orEmpty(),
@@ -220,7 +252,7 @@ fun LiveScreen(viewModel: LiveViewModel) {
                         Text("Loading channels…", style = MaterialTheme.typography.titleMedium)
                     }
                 } else {
-                    ChannelGrid(channels, state.favoriteUrls, play, viewModel::toggleFavorite)
+                    ChannelGrid(channels, state.favoriteUrls, play, viewModel::toggleFavorite, firstChannelFocus)
                 }
             }
         }
@@ -233,6 +265,7 @@ private fun ChannelGrid(
     favoriteUrls: Set<String>,
     onPlay: (LiveChannel) -> Unit,
     onToggleFavorite: (LiveChannel) -> Unit,
+    firstFocus: FocusRequester? = null,
 ) {
     var visible by rememberSaveable(channels.size) { mutableStateOf(MAX_RENDERED) }
     if (channels.isEmpty()) {
@@ -251,12 +284,13 @@ private fun ChannelGrid(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        items(channels.take(visible), key = { it.id }) { channel ->
+        itemsIndexed(channels.take(visible), key = { _, channel -> channel.id }) { index, channel ->
             // One clean focus target per channel: OK plays, long-press OK
             // toggles the favourite (shown as a small heart on the card).
             Card(
                 onClick = { onPlay(channel) },
                 onLongClick = { onToggleFavorite(channel) },
+                modifier = if (index == 0 && firstFocus != null) Modifier.focusRequester(firstFocus) else Modifier,
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
