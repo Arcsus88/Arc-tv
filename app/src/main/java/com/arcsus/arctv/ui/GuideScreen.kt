@@ -170,7 +170,7 @@ fun GuideScreen(viewModel: GuideViewModel) {
                         }
                         Spacer(Modifier.height(6.dp))
                         GuideGroupItem(
-                            label = if (showPicker) "Close picker" else "+ Add group",
+                            label = if (showPicker) "Done" else "+ Add group",
                             selected = showPicker,
                             onActivate = { picking = !picking },
                         )
@@ -183,11 +183,12 @@ fun GuideScreen(viewModel: GuideViewModel) {
                                 validSelected = validSelected,
                                 search = search,
                                 onSearchChange = { search = it },
-                                onAdd = {
-                                    viewModel.addGroup(it)
-                                    picking = false
-                                    search = ""
-                                },
+                                // The picker stays open: pick as many groups
+                                // as you like, then press Done. Closing on the
+                                // first add threw away the focused card, and the
+                                // next key press fell into the rail -- straight
+                                // to Home.
+                                onAdd = { viewModel.addGroup(it) },
                                 onRemove = { viewModel.removeGroup(it) },
                             )
                         } else if (current != null) {
@@ -243,22 +244,29 @@ fun GuideScreen(viewModel: GuideViewModel) {
 /** A group entry in the guide's left menu: Sky's white box marks the active one. */
 @Composable
 private fun GuideGroupItem(label: String, selected: Boolean, onActivate: () -> Unit) {
+    val shape = RoundedCornerShape(6.dp)
     Surface(
         onClick = onActivate,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+        shape = ClickableSurfaceDefaults.shape(shape),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) Color.White.copy(alpha = 0.22f) else Color.Transparent,
-            focusedContainerColor = ArcBlue,
-            contentColor = if (selected) Color(0xFF0B0F15)
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-            focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+            containerColor = if (selected) Color.White.copy(alpha = 0.20f) else Color.Transparent,
+            focusedContainerColor = Color.White.copy(alpha = if (selected) 0.32f else 0.22f),
+            contentColor = if (selected) Color.White else Color.White.copy(alpha = 0.86f),
+            focusedContentColor = Color.White,
         ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = androidx.tv.material3.Border(
+                androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)),
+                shape = shape,
+            ),
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
             label,
             style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
@@ -304,7 +312,22 @@ private fun GroupPicker(
         ) {
             items(matches, key = { it.name.ifBlank { "__ungrouped" } }) { group ->
                 val selected = validSelected.contains(group.name)
-                Card(onClick = { if (selected) onRemove(group.name) else onAdd(group.name) }) {
+                val shape = RoundedCornerShape(8.dp)
+                Card(
+                    onClick = { if (selected) onRemove(group.name) else onAdd(group.name) },
+                    shape = androidx.tv.material3.CardDefaults.shape(shape),
+                    colors = androidx.tv.material3.CardDefaults.colors(
+                        containerColor = if (selected) Color.White.copy(alpha = 0.20f)
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                    scale = androidx.tv.material3.CardDefaults.scale(focusedScale = 1.03f),
+                    border = androidx.tv.material3.CardDefaults.border(
+                        focusedBorder = androidx.tv.material3.Border(
+                            androidx.compose.foundation.BorderStroke(1.5.dp, Color.White),
+                            shape = shape,
+                        ),
+                    ),
+                ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -323,7 +346,7 @@ private fun GroupPicker(
                             )
                         }
                         if (selected) {
-                            Text("✕", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("✓", color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
