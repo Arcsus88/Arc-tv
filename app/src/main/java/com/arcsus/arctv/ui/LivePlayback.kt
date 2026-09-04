@@ -28,7 +28,7 @@ fun playLive(context: Context, channels: List<LiveChannel>, index: Int, inApp: B
 fun rememberLivePlay(): (List<LiveChannel>, Int) -> Unit {
     val context = LocalContext.current
     val app = context.applicationContext as ArcTvApp
-    val inApp by app.settingsStore.liveInAppPlayer.collectAsState(initial = true)
+    val inApp by app.settingsStore.liveInAppPlayer.collectAsState(initial = false)
     return { channels, index ->
         if (!playLive(context, channels, index, inApp)) {
             Toast.makeText(context, "No video player installed.", Toast.LENGTH_LONG).show()

@@ -172,7 +172,8 @@ fun SettingsScreen(viewModel: SettingsViewModel, updateViewModel: UpdateViewMode
                     if (state.liveInAppPlayer) {
                         "Channels play inside Arc. Up and down on the remote change channel, OK shows what's on, BACK returns."
                     } else {
-                        "Channels open in VLC or whichever player you choose."
+                        "Channels open in VLC or whichever player you choose. Pick this when the player, " +
+                            "but not Arc TV, sits in your VPN's app list."
                     },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

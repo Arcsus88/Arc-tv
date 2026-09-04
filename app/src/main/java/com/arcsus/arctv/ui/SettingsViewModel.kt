@@ -44,7 +44,7 @@ class SettingsViewModel(
         val rdConnected: Boolean = false,
         val adConnected: Boolean = false,
         val torboxToken: String = "",
-        val liveInAppPlayer: Boolean = true,
+        val liveInAppPlayer: Boolean = false,
         val playlists: List<SavedPlaylist> = emptyList(),
         val connect: ConnectState = ConnectState.Idle,
         val pairing: PairState = PairState.Idle,

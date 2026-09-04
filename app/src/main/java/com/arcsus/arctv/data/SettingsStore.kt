@@ -67,8 +67,13 @@ class SettingsStore(context: Context) {
         dataStore.edit { it[Keys.LIVE_SETUP_DONE] = true }
     }
 
-    /** Play live channels in Arc's own player (default) rather than an external app. */
-    val liveInAppPlayer: Flow<Boolean> = dataStore.data.map { it[Keys.LIVE_IN_APP_PLAYER] ?: true }
+    /**
+     * Play live channels in Arc's own player rather than an external app.
+     * Off by default: an external player can sit inside the VPN's app list
+     * while Arc TV stays outside it, and Arc's player can only use whatever
+     * route the VPN gives Arc TV itself.
+     */
+    val liveInAppPlayer: Flow<Boolean> = dataStore.data.map { it[Keys.LIVE_IN_APP_PLAYER] ?: false }
 
     suspend fun setLiveInAppPlayer(enabled: Boolean) {
         dataStore.edit { it[Keys.LIVE_IN_APP_PLAYER] = enabled }
