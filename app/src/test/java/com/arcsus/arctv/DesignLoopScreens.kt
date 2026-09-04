@@ -167,8 +167,14 @@ class DesignLoopScreens {
      * Focus placed on the rail any other way is treated as the platform's
      * doing and sent back into the content, so a plain requestFocus won't do.
      */
+    private val railTitles = listOf("Browse", "Movies", "TV Shows", "Live", "Guide", "Downloads", "Torrents", "Settings", "Search")
+
+    private fun onRail(): Boolean = railTitles.any { isFocused(it) }
+
     private fun focus(text: String): Boolean {
-        key(androidx.compose.ui.input.key.Key.DirectionLeft)
+        // LEFT until the rail has focus: from the middle of a row, each
+        // press only steps one tile.
+        repeat(12) { if (!onRail()) key(androidx.compose.ui.input.key.Key.DirectionLeft) }
         repeat(8) { if (!isFocused(text)) key(androidx.compose.ui.input.key.Key.DirectionUp) }
         repeat(10) { if (!isFocused(text)) key(androidx.compose.ui.input.key.Key.DirectionDown) }
         val reached = isFocused(text)

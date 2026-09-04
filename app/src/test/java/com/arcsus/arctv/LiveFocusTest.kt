@@ -156,8 +156,10 @@ class LiveFocusTest {
      * the rail any other way is, by design, treated as the platform's doing
      * and sent back into the content.)
      */
+    private val railTitles = listOf("Browse", "Movies", "TV Shows", "Live", "Guide", "Settings", "Search")
+
     private fun railTo(title: String) {
-        key(Key.DirectionLeft)
+        repeat(12) { if (railTitles.none { isFocused(it) }) key(Key.DirectionLeft) }
         repeat(8) { if (!isFocused(title)) key(Key.DirectionUp) }
         repeat(10) { if (!isFocused(title)) key(Key.DirectionDown) }
         assertTrue("could not reach '$title' on the rail", isFocused(title))
