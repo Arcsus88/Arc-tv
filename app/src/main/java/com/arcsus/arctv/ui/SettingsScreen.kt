@@ -150,6 +150,36 @@ fun SettingsScreen(viewModel: SettingsViewModel, updateViewModel: UpdateViewMode
             }
         }
 
+        item { SectionTitle("Live TV player") }
+
+        item {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ArcChip(
+                        label = "Arc TV",
+                        selected = state.liveInAppPlayer,
+                        onClick = { viewModel.setLiveInAppPlayer(true) },
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    ArcChip(
+                        label = "External player",
+                        selected = !state.liveInAppPlayer,
+                        onClick = { viewModel.setLiveInAppPlayer(false) },
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    if (state.liveInAppPlayer) {
+                        "Channels play inside Arc. Up and down on the remote change channel, OK shows what's on, BACK returns."
+                    } else {
+                        "Channels open in VLC or whichever player you choose."
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
         item { SectionTitle("Live TV playlists") }
 
         item {

@@ -1,6 +1,5 @@
 package com.arcsus.arctv.ui
 
-import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -97,14 +96,16 @@ private val CHANNEL_COL = 176.dp
 @Composable
 fun GuideScreen(viewModel: GuideViewModel) {
     val state by viewModel.state.collectAsState()
-    val context = LocalContext.current
     var picking by rememberSaveable { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
 
+    // The guide's channels are the zap list, so up/down in the player walk
+    // the same group the guide shows.
+    val playLive = rememberLivePlay()
     val play: (LiveChannel) -> Unit = { channel ->
-        if (!playVideo(context, channel.url, channel.name)) {
-            Toast.makeText(context, "No video player installed.", Toast.LENGTH_LONG).show()
-        }
+        val list = state.channels
+        val at = list.indexOfFirst { it.url == channel.url }
+        if (at >= 0) playLive(list, at) else playLive(listOf(channel), 0)
     }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 12.dp)) {

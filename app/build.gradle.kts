@@ -30,7 +30,7 @@ val hasReleaseSigning = releaseStoreFile != null && releaseStorePassword != null
 // the installed build always reports exactly the version of the release it came
 // from. They used to be set independently, and any drift left the update banner
 // permanently offering a release the device already had.
-val fallbackVersion = "1.17.4"
+val fallbackVersion = "1.18.0"
 val releaseVersion: String =
     (project.findProperty("releaseVersion") as String?)?.trim()?.removePrefix("v")
         ?.takeIf { it.isNotEmpty() } ?: fallbackVersion
@@ -117,6 +117,10 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
     implementation(libs.zxing.core)
+    // Live TV in-app player (MPEG-TS and HLS streams from IPTV panels).
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.exoplayer.hls)
+    implementation(libs.media3.ui)
 
     // Design-loop screenshot harness (test only; nothing ships).
     testImplementation(libs.junit)

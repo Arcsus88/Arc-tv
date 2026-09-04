@@ -511,27 +511,56 @@ private fun HeroBanner(
     }
 }
 
+/**
+ * One row above the grid: how to sort, then the genre as a single drop-down
+ * chip. A strip of every genre plus the focused title's synopsis used to sit
+ * here and squeezed the posters to a sliver; the synopsis now waits on the
+ * details page, one press away.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun CategoryBar(viewModel: BrowseViewModel) {
     val state by viewModel.state.collectAsState()
-    Column(Modifier.padding(bottom = 12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            SortMode.entries.forEach { mode ->
-                TextChip(label = mode.label, selected = state.sortMode == mode, onClick = { viewModel.setSort(mode) })
-                Spacer(Modifier.width(6.dp))
-            }
+    var pickingGenre by remember { mutableStateOf(false) }
+    val genreName = state.currentGenres.firstOrNull { it.id == state.genreId }?.name
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 10.dp)) {
+        SortMode.entries.forEach { mode ->
+            TextChip(label = mode.label, selected = state.sortMode == mode, onClick = { viewModel.setSort(mode) })
+            Spacer(Modifier.width(6.dp))
         }
         if (state.currentGenres.isNotEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                item {
-                    TextChip(label = "All", selected = state.genreId == null, onClick = { viewModel.setGenre(null) })
-                }
-                items(state.currentGenres, key = { it.id }) { genre ->
-                    TextChip(label = genre.name, selected = state.genreId == genre.id, onClick = { viewModel.setGenre(genre.id) })
+            Spacer(Modifier.width(10.dp))
+            TextChip(
+                label = (genreName ?: "All genres") + "  ▾",
+                selected = genreName != null,
+                onClick = { pickingGenre = true },
+            )
+        }
+    }
+    if (pickingGenre) {
+        val currentFocus = remember { FocusRequester() }
+        SheetDialog("Genre", onDismiss = { pickingGenre = false }) {
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TextChip(
+                    label = "All genres",
+                    selected = state.genreId == null,
+                    onClick = { viewModel.setGenre(null); pickingGenre = false },
+                    modifier = if (state.genreId == null) Modifier.focusRequester(currentFocus) else Modifier,
+                )
+                state.currentGenres.forEach { genre ->
+                    TextChip(
+                        label = genre.name,
+                        selected = state.genreId == genre.id,
+                        onClick = { viewModel.setGenre(genre.id); pickingGenre = false },
+                        modifier = if (state.genreId == genre.id) Modifier.focusRequester(currentFocus) else Modifier,
+                    )
                 }
             }
         }
+        LaunchedEffect(Unit) { currentFocus.requestFocusWhenReady() }
     }
 }
 
@@ -590,73 +619,20 @@ private fun DiscoverGrid(viewModel: BrowseViewModel) {
                 snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
                     .collect { last -> if (last >= count - 12) viewModel.loadMoreDiscover() }
             }
-            // Sky's browse pattern: the focused tile is described above the grid.
-            var focusedItem by remember { mutableStateOf<CatalogItem?>(null) }
-            Column(Modifier.fillMaxSize()) {
-                // Passed as a lambda, not a value: read here, every tile you
-                // moved onto recomposed the whole grid scope.
-                FocusDetailHeader { focusedItem ?: state.discoverItems.firstOrNull() }
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
-                    state = gridState,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(bottom = 32.dp, top = 4.dp),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    gridItems(state.discoverItems, key = { it.type + it.id }) { item ->
-                        WideTile(item, Modifier, onFocus = { focusedItem = it }) {
-                            viewModel.openDetails(item)
-                        }
-                    }
+            // Posters, and nothing else: the title's details are on the
+            // page that opens when a poster is pressed.
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(4),
+                state = gridState,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 32.dp, top = 4.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                gridItems(state.discoverItems, key = { it.type + it.id }) { item ->
+                    WideTile(item, Modifier) { viewModel.openDetails(item) }
                 }
             }
-        }
-    }
-}
-
-/** Sky's browse header: whichever tile the focus rests on is described here. */
-@Composable
-private fun FocusDetailHeader(focused: () -> CatalogItem?) {
-    Column(Modifier.fillMaxWidth().padding(bottom = 10.dp).heightIn(min = 78.dp)) {
-        val item = focused()
-        if (item == null) {
-            Text(
-                "Move around the grid — details appear here.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            return
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                item.title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            Spacer(Modifier.width(12.dp))
-            Text(
-                listOfNotNull(
-                    item.year.takeIf { it.isNotBlank() },
-                    if (item.isTv) "Series" else "Film",
-                ).joinToString("  ·  "),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (item.overview.isNotBlank()) {
-            Spacer(Modifier.height(3.dp))
-            Text(
-                item.overview,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth(0.8f),
-            )
         }
     }
 }

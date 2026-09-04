@@ -44,6 +44,7 @@ class SettingsViewModel(
         val rdConnected: Boolean = false,
         val adConnected: Boolean = false,
         val torboxToken: String = "",
+        val liveInAppPlayer: Boolean = true,
         val playlists: List<SavedPlaylist> = emptyList(),
         val connect: ConnectState = ConnectState.Idle,
         val pairing: PairState = PairState.Idle,
@@ -76,6 +77,9 @@ class SettingsViewModel(
         }
         viewModelScope.launch {
             settingsStore.torboxToken.collect { _state.value = _state.value.copy(torboxToken = it) }
+        }
+        viewModelScope.launch {
+            settingsStore.liveInAppPlayer.collect { _state.value = _state.value.copy(liveInAppPlayer = it) }
         }
         viewModelScope.launch {
             settingsStore.playlists.collect { _state.value = _state.value.copy(playlists = it) }
@@ -186,6 +190,10 @@ class SettingsViewModel(
     fun cancelPairing() {
         pairJob?.cancel()
         _state.value = _state.value.copy(pairing = PairState.Idle)
+    }
+
+    fun setLiveInAppPlayer(enabled: Boolean) {
+        viewModelScope.launch { settingsStore.setLiveInAppPlayer(enabled) }
     }
 
     fun saveTorboxToken(token: String) {

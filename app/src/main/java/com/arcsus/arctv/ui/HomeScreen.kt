@@ -198,7 +198,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
     }
 
     val liveState by liveViewModel.state.collectAsState()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val playLive = rememberLivePlay()
 
     // Sky Q layout: a left navigation rail (preview tile, vertical menu with
     // the active section boxed, brand and clock at the foot) and the content
@@ -231,11 +231,13 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
             },
             preview = liveState.favorites.firstOrNull(),
             onPreviewClick = { channel ->
-                if (!playVideo(context, channel.url, channel.name)) {
-                    android.widget.Toast.makeText(
-                        context, "No video player installed.", android.widget.Toast.LENGTH_LONG,
-                    ).show()
+                // Favourites are the zap list from the preview tile.
+                val favourites = liveState.favorites.map {
+                    com.arcsus.arctv.data.LiveChannel(
+                        id = "fav:${it.url}", name = it.name, logo = it.logo, group = "Favourites", url = it.url,
+                    )
                 }
+                playLive(favourites, favourites.indexOfFirst { it.url == channel.url }.coerceAtLeast(0))
             },
         )
         Column(

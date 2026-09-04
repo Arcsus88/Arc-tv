@@ -52,6 +52,7 @@ class SettingsStore(context: Context) {
         val FAVORITES = stringPreferencesKey("favorites")
         val FAVORITE_CHANNELS = stringPreferencesKey("favorite_channels")
         val LIVE_SETUP_DONE = androidx.datastore.preferences.core.booleanPreferencesKey("live_setup_done")
+        val LIVE_IN_APP_PLAYER = androidx.datastore.preferences.core.booleanPreferencesKey("live_in_app_player")
     }
 
     /**
@@ -64,6 +65,13 @@ class SettingsStore(context: Context) {
 
     suspend fun markLiveSetupDone() {
         dataStore.edit { it[Keys.LIVE_SETUP_DONE] = true }
+    }
+
+    /** Play live channels in Arc's own player (default) rather than an external app. */
+    val liveInAppPlayer: Flow<Boolean> = dataStore.data.map { it[Keys.LIVE_IN_APP_PLAYER] ?: true }
+
+    suspend fun setLiveInAppPlayer(enabled: Boolean) {
+        dataStore.edit { it[Keys.LIVE_IN_APP_PLAYER] = enabled }
     }
 
     val torboxToken: Flow<String> = dataStore.data.map { it[Keys.TORBOX_TOKEN].orEmpty() }

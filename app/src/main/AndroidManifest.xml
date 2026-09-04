@@ -36,6 +36,16 @@
             </intent-filter>
         </activity>
 
+        <!-- Full-screen live TV. Config changes are handled in place so a
+             stream is never re-tuned for a size or UI-mode change. -->
+        <activity
+            android:name=".LivePlayerActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+            android:theme="@style/Theme.ArcTv" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

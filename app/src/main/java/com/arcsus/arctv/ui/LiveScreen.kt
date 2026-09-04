@@ -1,6 +1,5 @@
 package com.arcsus.arctv.ui
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,7 +54,6 @@ private const val FAV_GROUP = "♥ Favourites"
 @Composable
 fun LiveScreen(viewModel: LiveViewModel) {
     val state by viewModel.state.collectAsState()
-    val context = LocalContext.current
     var selectedGroup by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
 
@@ -77,11 +75,7 @@ fun LiveScreen(viewModel: LiveViewModel) {
         }
     }
 
-    val play: (LiveChannel) -> Unit = { channel ->
-        if (!playVideo(context, channel.url, channel.name)) {
-            Toast.makeText(context, "No video player installed.", Toast.LENGTH_LONG).show()
-        }
-    }
+    val play = rememberLivePlay()
 
     Column(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 12.dp)) {
         if (state.playlists.isEmpty()) {
@@ -263,7 +257,7 @@ fun LiveScreen(viewModel: LiveViewModel) {
 private fun ChannelGrid(
     channels: List<LiveChannel>,
     favoriteUrls: Set<String>,
-    onPlay: (LiveChannel) -> Unit,
+    onPlay: (List<LiveChannel>, Int) -> Unit,
     onToggleFavorite: (LiveChannel) -> Unit,
     firstFocus: FocusRequester? = null,
 ) {
@@ -288,7 +282,7 @@ private fun ChannelGrid(
             // One clean focus target per channel: OK plays, long-press OK
             // toggles the favourite (shown as a small heart on the card).
             Card(
-                onClick = { onPlay(channel) },
+                onClick = { onPlay(channels, index) },
                 onLongClick = { onToggleFavorite(channel) },
                 modifier = if (index == 0 && firstFocus != null) Modifier.focusRequester(firstFocus) else Modifier,
             ) {
