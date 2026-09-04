@@ -301,6 +301,14 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
                 )
             }
         }
+        // Netflix's "Continue watching": whatever played last, one press
+        // from playing again. Films reopen their sources, series the next
+        // episode, channels tune straight in. Hold OK on a tile to drop it.
+        if (state.continueWatching.isNotEmpty()) {
+            item(key = "__continue") {
+                ContinueWatchingRow(state.continueWatching, viewModel)
+            }
+        }
         items(if (showHero) rows.drop(1) else rows, key = { it.title }) { row ->
             Column {
                 Text(
@@ -715,6 +723,151 @@ private fun LandscapeTile(item: CatalogItem, modifier: Modifier = Modifier, onCl
                 Spacer(Modifier.height(3.dp))
                 Text(
                     item.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContinueWatchingRow(entries: List<com.arcsus.arctv.data.WatchEntry>, viewModel: BrowseViewModel) {
+    val playLive = rememberLivePlay()
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 40.dp)) {
+            Text(
+                "Continue watching",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(Modifier.width(14.dp))
+            Text(
+                "Hold OK to remove",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(horizontal = 40.dp, vertical = 12.dp),
+        ) {
+            items(entries, key = { it.key }) { entry ->
+                ContinueTile(
+                    entry = entry,
+                    onOpen = {
+                        val channel = entry.channel
+                        if (entry.kind == "live" && channel != null) {
+                            playLive(
+                                listOf(
+                                    com.arcsus.arctv.data.LiveChannel(
+                                        id = "cw:${channel.url}",
+                                        name = channel.name,
+                                        logo = channel.logo,
+                                        group = entry.group,
+                                        url = channel.url,
+                                    ),
+                                ),
+                                0,
+                            )
+                        } else {
+                            viewModel.resumeWatch(entry)
+                        }
+                    },
+                    onRemove = { viewModel.removeWatch(entry.key) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * A Continue Watching tile: the title's wide artwork with what comes next
+ * ("Next up  S2 E6"), or a channel's logo on the panel colour with "Live".
+ */
+@Composable
+private fun ContinueTile(entry: com.arcsus.arctv.data.WatchEntry, onOpen: () -> Unit, onRemove: () -> Unit) {
+    val shape = RoundedCornerShape(6.dp)
+    val item = entry.item
+    val channel = entry.channel
+    Card(
+        onClick = onOpen,
+        onLongClick = onRemove,
+        shape = CardDefaults.shape(shape),
+        scale = CardDefaults.scale(focusedScale = 1.06f),
+        border = CardDefaults.border(
+            focusedBorder = Border(BorderStroke(2.5.dp, Color.White), shape = shape),
+        ),
+        modifier = Modifier.width(LANDSCAPE_WIDTH),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        ) {
+            if (item != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(item.backdrop.ifBlank { item.poster })
+                        .crossfade(180)
+                        .build(),
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else if (channel != null) {
+                if (channel.logo.isNotBlank()) {
+                    AsyncImage(
+                        model = channel.logo,
+                        contentDescription = channel.name,
+                        modifier = Modifier.size(56.dp).align(Alignment.Center),
+                    )
+                } else {
+                    Text(
+                        channel.name.trim().firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "•",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = ArcBlue,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                }
+            }
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .background(
+                        Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.86f))),
+                    ),
+            )
+            Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 10.dp, vertical = 8.dp)) {
+                val badge = when {
+                    entry.kind == "live" -> "Live"
+                    entry.kind == "tv" && entry.nextSeason != null && entry.nextEpisode != null ->
+                        "Next up  S${entry.nextSeason} E${entry.nextEpisode}"
+                    entry.kind == "tv" && entry.season != null && entry.episode != null ->
+                        "S${entry.season} E${entry.episode}"
+                    entry.kind == "tv" -> "Series"
+                    else -> "Film"
+                }
+                Text(
+                    badge,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (entry.kind == "live") ArcBlue else Color.White,
+                    fontWeight = if (entry.kind == "live") FontWeight.Bold else FontWeight.Normal,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(3.dp))
+                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    entry.title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,

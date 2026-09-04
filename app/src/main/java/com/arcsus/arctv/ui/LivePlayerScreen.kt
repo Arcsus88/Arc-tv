@@ -72,6 +72,9 @@ private const val LIVE_USER_AGENT = "VLC/3.0.20 LibVLC/3.0.20"
 /** How long the channel banner stays up once the picture is playing. */
 private const val BANNER_MS = 4_000L
 
+/** Time on a channel before it counts as watched (Continue Watching). */
+private const val WATCHED_AFTER_MS = 30_000L
+
 private enum class PlayStatus { TUNING, PLAYING, ENDED, FAILED }
 
 /**
@@ -157,6 +160,13 @@ fun LivePlayerScreen(channels: List<LiveChannel>, startIndex: Int, onExit: () ->
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Zapping to a channel and staying there is watching it.
+    LaunchedEffect(index) {
+        val c = channels.getOrNull(index) ?: return@LaunchedEffect
+        delay(WATCHED_AFTER_MS)
+        (context.applicationContext as? com.arcsus.arctv.ArcTvApp)?.settingsStore?.recordWatch(watchEntryOf(c))
     }
 
     LaunchedEffect(banner, status, index) {

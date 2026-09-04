@@ -37,11 +37,38 @@ data class SavedChannel(
     val logo: String = "",
 )
 
+/**
+ * Something the viewer played, for the Continue Watching row. A film or a
+ * series (with the episode played and, when known, the one after it), or a
+ * live channel. Playback runs in another app, so this is "what you were
+ * watching", not "where you got to".
+ */
+@Serializable
+data class WatchEntry(
+    val kind: String = "movie", // "movie" | "tv" | "live"
+    val item: CatalogItem? = null,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val nextSeason: Int? = null,
+    val nextEpisode: Int? = null,
+    val channel: SavedChannel? = null,
+    val group: String = "",
+    val at: Long = 0L,
+) {
+    /** One entry per title or channel, whichever episode was played last. */
+    val key: String get() = if (kind == "live") "live:${channel?.url}" else "$kind:${item?.id}"
+    val title: String get() = if (kind == "live") channel?.name.orEmpty() else item?.title.orEmpty()
+}
+
 /** User settings: TorBox token override and the Live TV playlists. */
 class SettingsStore(context: Context) {
 
     private val dataStore = context.applicationContext.settingsDataStore
     private val json = Json { ignoreUnknownKeys = true }
+
+    private companion object {
+        const val MAX_CONTINUE_WATCHING = 20
+    }
 
     private object Keys {
         val TORBOX_TOKEN = stringPreferencesKey("torbox_token")
@@ -51,6 +78,7 @@ class SettingsStore(context: Context) {
         val GUIDE_ACTIVE_GROUP = stringPreferencesKey("guide_active_group")
         val FAVORITES = stringPreferencesKey("favorites")
         val FAVORITE_CHANNELS = stringPreferencesKey("favorite_channels")
+        val CONTINUE_WATCHING = stringPreferencesKey("continue_watching")
         val LIVE_SETUP_DONE = androidx.datastore.preferences.core.booleanPreferencesKey("live_setup_done")
         val LIVE_IN_APP_PLAYER = androidx.datastore.preferences.core.booleanPreferencesKey("live_in_app_player")
     }
@@ -130,6 +158,26 @@ class SettingsStore(context: Context) {
 
     suspend fun saveActiveGuideGroup(group: String) {
         dataStore.edit { it[Keys.GUIDE_ACTIVE_GROUP] = group }
+    }
+
+    /** What the viewer played most recently, newest first. */
+    val continueWatching: Flow<List<WatchEntry>> = dataStore.data.map { prefs ->
+        val raw = prefs[Keys.CONTINUE_WATCHING]
+        if (raw.isNullOrBlank()) emptyList()
+        else runCatching { json.decodeFromString<List<WatchEntry>>(raw) }.getOrDefault(emptyList())
+    }
+
+    /** Puts [entry] at the front, replacing an older entry for the same title or channel. */
+    suspend fun recordWatch(entry: WatchEntry) {
+        val stamped = entry.copy(at = System.currentTimeMillis())
+        val next = (listOf(stamped) + continueWatching.first().filterNot { it.key == stamped.key })
+            .take(MAX_CONTINUE_WATCHING)
+        dataStore.edit { it[Keys.CONTINUE_WATCHING] = json.encodeToString(next) }
+    }
+
+    suspend fun removeWatch(key: String) {
+        val next = continueWatching.first().filterNot { it.key == key }
+        dataStore.edit { it[Keys.CONTINUE_WATCHING] = json.encodeToString(next) }
     }
 
     /** Titles the user marked as favourites, newest first. */

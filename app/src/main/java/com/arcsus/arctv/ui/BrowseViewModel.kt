@@ -11,6 +11,7 @@ import com.arcsus.arctv.data.Genres
 import com.arcsus.arctv.data.ResolvedStream
 import com.arcsus.arctv.data.Season
 import com.arcsus.arctv.data.SettingsStore
+import com.arcsus.arctv.data.WatchEntry
 import com.arcsus.arctv.data.Source
 import com.arcsus.arctv.data.TitleDetails
 import kotlinx.coroutines.CancellationException
@@ -74,6 +75,8 @@ class BrowseViewModel(
         val discoverLoading: Boolean = false,
         /** Titles the user hearted — shown as the first Browse carousel. */
         val favorites: List<CatalogItem> = emptyList(),
+        /** What was played most recently, for the Continue Watching row. */
+        val continueWatching: List<WatchEntry> = emptyList(),
     ) {
         fun isFavorite(item: CatalogItem): Boolean =
             favorites.any { it.id == item.id && it.type == item.type }
@@ -135,6 +138,44 @@ class BrowseViewModel(
             settingsStore.favorites.collect { favs ->
                 _state.update { it.copy(favorites = favs) }
             }
+        }
+        viewModelScope.launch {
+            settingsStore.continueWatching.collect { entries ->
+                _state.update { it.copy(continueWatching = entries) }
+            }
+        }
+    }
+
+    /**
+     * Continue Watching: a film goes straight to its sources; a series goes
+     * to the sources of the episode after the one played (or the same one
+     * again when the next isn't known).
+     */
+    fun resumeWatch(entry: WatchEntry) {
+        val item = entry.item ?: return
+        val season = entry.nextSeason ?: entry.season
+        val episode = entry.nextEpisode ?: entry.episode
+        if (item.isTv && season != null && episode != null) selectEpisode(item, season, episode) else openTitle(item)
+    }
+
+    fun removeWatch(key: String) {
+        viewModelScope.launch { settingsStore.removeWatch(key) }
+    }
+
+    /** Remember what just started playing, with the next episode worked out for series. */
+    private fun recordWatch(item: CatalogItem, season: Int?, episode: Int?, next: NextEp?) {
+        viewModelScope.launch {
+            val n = next ?: runCatching { resolveNext(item, season, episode) }.getOrNull()
+            settingsStore.recordWatch(
+                WatchEntry(
+                    kind = item.type,
+                    item = item,
+                    season = season,
+                    episode = episode,
+                    nextSeason = n?.season,
+                    nextEpisode = n?.episode,
+                ),
+            )
         }
     }
 
@@ -455,6 +496,7 @@ class BrowseViewModel(
                     _sheet.value = it.copy(playing = null, note = null)
                 }
                 _playRequest.value = stream
+                recordWatch(s.item, s.season, s.episode, s.next)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

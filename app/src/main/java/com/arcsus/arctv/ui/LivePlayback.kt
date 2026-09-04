@@ -5,10 +5,14 @@ import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import com.arcsus.arctv.ArcTvApp
 import com.arcsus.arctv.LivePlayerActivity
 import com.arcsus.arctv.data.LiveChannel
+import com.arcsus.arctv.data.SavedChannel
+import com.arcsus.arctv.data.WatchEntry
+import kotlinx.coroutines.launch
 
 /**
  * Plays a live channel: in Arc's own player, with the rest of [channels] as
@@ -29,9 +33,21 @@ fun rememberLivePlay(): (List<LiveChannel>, Int) -> Unit {
     val context = LocalContext.current
     val app = context.applicationContext as ArcTvApp
     val inApp by app.settingsStore.liveInAppPlayer.collectAsState(initial = false)
+    val scope = rememberCoroutineScope()
     return { channels, index ->
         if (!playLive(context, channels, index, inApp)) {
             Toast.makeText(context, "No video player installed.", Toast.LENGTH_LONG).show()
+        } else {
+            channels.getOrNull(index)?.let { channel ->
+                scope.launch { app.settingsStore.recordWatch(watchEntryOf(channel)) }
+            }
         }
     }
 }
+
+/** The Continue Watching entry for a live channel. */
+fun watchEntryOf(channel: LiveChannel) = WatchEntry(
+    kind = "live",
+    channel = SavedChannel(name = channel.name, url = channel.url, logo = channel.logo),
+    group = channel.group,
+)
