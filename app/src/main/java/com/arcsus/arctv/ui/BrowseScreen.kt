@@ -216,11 +216,17 @@ fun BrowseScreen(
                 color = ArcBlue,
             )
             Spacer(Modifier.height(8.dp))
+            val dts = hasDtsAudio(stream.filename)
             Text(
-                "The player closed within seconds of starting. Try again, or pick a " +
-                    "different source from the list.",
+                if (dts) {
+                    "This file has DTS audio, which the TV's own player can't decode -- it opens and " +
+                        "quits. Open it with VLC, or pick a source with AC3, DD or AAC sound."
+                } else {
+                    "The player closed within seconds of starting. Try again, open it with a " +
+                        "different player, or pick another source from the list."
+                },
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (dts) androidx.compose.ui.graphics.Color(0xFFFFC96B) else MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -235,6 +241,13 @@ fun BrowseScreen(
                         ).show()
                     }
                 }) { Text("Try again") }
+                Spacer(Modifier.width(12.dp))
+                OutlinedButton(onClick = {
+                    quickExit = null
+                    lastStream = stream
+                    launchedAt = System.currentTimeMillis()
+                    if (!playVideoWith(context, stream.streamUrl, stream.filename)) launchedAt = 0L
+                }) { Text("Open with…") }
                 Spacer(Modifier.width(12.dp))
                 OutlinedButton(onClick = { quickExit = null }) { Text("Close") }
             }
@@ -1253,6 +1266,17 @@ private fun SourceRow(source: Source, playing: Boolean, onClick: () -> Unit) {
                     Spacer(Modifier.width(12.dp))
                 }
                 Text("▲ ${source.seeds}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (hasDtsAudio(source.title)) {
+                    // The TV's built-in player has no DTS licence; flag it
+                    // before the viewer finds out the hard way.
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        "DTS audio",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = androidx.compose.ui.graphics.Color(0xFFFFC96B),
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
                 if (source.cached) {
                     Spacer(Modifier.width(12.dp))
                     Text(

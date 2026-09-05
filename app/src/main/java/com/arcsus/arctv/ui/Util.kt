@@ -58,6 +58,28 @@ fun playVideo(context: Context, url: String, title: String? = null): Boolean {
 }
 
 /**
+ * Play via the system's "Open with" chooser, so a file the default player
+ * can't handle (the TV's own Media Player and DTS audio, say) can be handed
+ * to VLC without changing the default first.
+ */
+fun playVideoWith(context: Context, url: String, title: String? = null): Boolean {
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(Uri.parse(url), "video/*")
+        if (!title.isNullOrBlank()) putExtra("title", title)
+    }
+    val chooser = Intent.createChooser(intent, "Open with").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+    return try {
+        context.startActivity(chooser)
+        true
+    } catch (e: ActivityNotFoundException) {
+        false
+    }
+}
+
+/** DTS audio: licensed, so the built-in player on many TVs plays silence or quits. */
+fun hasDtsAudio(name: String): Boolean = Regex("\\bdts\\b|dts-hd|dts\\.hd|dtshd|\\bdts[-.]?x\\b", RegexOption.IGNORE_CASE).containsMatchIn(name)
+
+/**
  * Builds a play intent suitable for launching *for result*, so players that
  * report back (MX Player, VLC, Just Player) let us auto-advance to the next
  * episode. No NEW_TASK flag — result delivery requires the same task.
