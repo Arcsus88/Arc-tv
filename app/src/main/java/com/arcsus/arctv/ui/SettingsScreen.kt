@@ -150,7 +150,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, updateViewModel: UpdateViewMode
             }
         }
 
-        item { SectionTitle("Live TV player") }
+        item { SectionTitle("Live TV") }
 
         item {
             Column {
@@ -175,6 +175,29 @@ fun SettingsScreen(viewModel: SettingsViewModel, updateViewModel: UpdateViewMode
                         "Channels open in VLC or whichever player you choose. Pick this when the player, " +
                             "but not Arc TV, sits in your VPN's app list."
                     },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        item {
+            Column {
+                Text("Your region", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(6.dp))
+                var regionDraft by remember { mutableStateOf(state.liveRegion) }
+                LaunchedEffect(state.liveRegion) { regionDraft = state.liveRegion }
+                TvEditField(
+                    value = regionDraft,
+                    onValueChange = { regionDraft = it.uppercase().take(6) },
+                    placeholder = "UK",
+                    onDeactivate = { viewModel.saveLiveRegion(regionDraft) },
+                    modifier = Modifier.fillMaxWidth(0.25f),
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "The tag your panel puts in front of its groups (UK| Sports, US: News). Those groups " +
+                        "come first on the Live tab and load ahead, so search finds their channels.",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

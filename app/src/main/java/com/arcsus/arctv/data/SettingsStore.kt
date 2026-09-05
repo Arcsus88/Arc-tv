@@ -68,6 +68,7 @@ class SettingsStore(context: Context) {
 
     private companion object {
         const val MAX_CONTINUE_WATCHING = 20
+        const val DEFAULT_LIVE_REGION = "UK"
     }
 
     private object Keys {
@@ -79,6 +80,7 @@ class SettingsStore(context: Context) {
         val FAVORITES = stringPreferencesKey("favorites")
         val FAVORITE_CHANNELS = stringPreferencesKey("favorite_channels")
         val CONTINUE_WATCHING = stringPreferencesKey("continue_watching")
+        val LIVE_REGION = stringPreferencesKey("live_region")
         val LIVE_SETUP_DONE = androidx.datastore.preferences.core.booleanPreferencesKey("live_setup_done")
         val LIVE_IN_APP_PLAYER = androidx.datastore.preferences.core.booleanPreferencesKey("live_in_app_player")
     }
@@ -158,6 +160,16 @@ class SettingsStore(context: Context) {
 
     suspend fun saveActiveGuideGroup(group: String) {
         dataStore.edit { it[Keys.GUIDE_ACTIVE_GROUP] = group }
+    }
+
+    /**
+     * The region stamp the viewer cares about ("UK"): its groups come first
+     * on the Live tab and load ahead so search can see their channels.
+     */
+    val liveRegion: Flow<String> = dataStore.data.map { it[Keys.LIVE_REGION] ?: DEFAULT_LIVE_REGION }
+
+    suspend fun saveLiveRegion(region: String) {
+        dataStore.edit { it[Keys.LIVE_REGION] = region.trim() }
     }
 
     /** What the viewer played most recently, newest first. */

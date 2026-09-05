@@ -2,6 +2,7 @@ package com.arcsus.arctv
 
 import android.os.Looper
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -216,7 +217,7 @@ class LiveFocusTest {
         openSection("Live")
         assertTrue("Live tab did not load the playlist", waitFor("UK", 20_000))
 
-        press { rule.onNodeWithText("UK", substring = true) }
+        press { rule.onNode(hasText("UK", substring = true) and hasClickAction()) }
         platformRefocus()
         settle(900)
         assertTrue("group did not open", hasNode("Groups"))
