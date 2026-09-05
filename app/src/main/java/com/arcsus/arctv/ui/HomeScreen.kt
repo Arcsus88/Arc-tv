@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
@@ -125,6 +127,10 @@ private class NavIntent {
  */
 internal val TV_INSET_H = 20.dp
 internal val TV_INSET_V = 14.dp
+
+/** The rail's two widths (before the inset): open with labels, closed to icons. */
+private val RAIL_OPEN_WIDTH = 214.dp
+private val RAIL_CLOSED_WIDTH = 64.dp
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -303,26 +309,38 @@ private fun NavRail(
     // the menu. It slims to icons while focus is in the content and opens
     // again the moment focus returns.
     var railFocused by remember { mutableStateOf(false) }
+    val expanded = railFocused
+    // The visible width animates; the contents do not. They are laid out at
+    // the open or closed width from the first frame and revealed by the
+    // moving edge -- laying text out at every in-between width wrapped the
+    // labels into columns of letters ("M / o / vi / es") mid-animation.
+    val targetWidth = (if (expanded) RAIL_OPEN_WIDTH else RAIL_CLOSED_WIDTH) + TV_INSET_H
     val railWidth by androidx.compose.animation.core.animateDpAsState(
-        targetValue = (if (railFocused) 214.dp else 64.dp) + TV_INSET_H,
+        targetValue = targetWidth,
         label = "railWidth",
     )
-    val expanded = railFocused
     val time by produceState(initialValue = clockNow()) {
         while (true) {
             value = clockNow()
             delay(20_000)
         }
     }
-    Column(
+    Box(
         Modifier
             .fillMaxHeight()
             .width(railWidth)
             .background(Color.White.copy(alpha = 0.045f))
+            .clipToBounds()
             .onFocusChanged {
                 railFocused = it.hasFocus
                 onFocusChanged(it.hasFocus)
-            }
+            },
+    ) {
+    Column(
+        Modifier
+            .fillMaxHeight()
+            .requiredWidth(targetWidth)
+            .align(Alignment.TopStart)
             .padding(start = TV_INSET_H + 8.dp, end = 10.dp, top = TV_INSET_V + 6.dp, bottom = TV_INSET_V + 6.dp),
     ) {
         // Brand + clock, as Sky puts them: top-left, always.
@@ -343,6 +361,8 @@ private fun NavRail(
                     time,
                     style = MaterialTheme.typography.labelLarge,
                     color = Color.White.copy(alpha = 0.85f),
+                    maxLines = 1,
+                    softWrap = false,
                 )
             }
         } else {
@@ -423,6 +443,7 @@ private fun NavRail(
             showIconExpanded = true,
         )
     }
+    }
 }
 
 /** The icon each section shows while the rail is closed. */
@@ -490,6 +511,8 @@ private fun RailItem(
                     title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1,
+                    softWrap = false,
                 )
             }
         } else {
