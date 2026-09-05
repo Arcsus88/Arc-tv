@@ -59,11 +59,12 @@ fun TorrentsScreen(viewModel: TorrentsViewModel) {
     val picker by viewModel.picker.collectAsState()
     val playRequest by viewModel.playRequest.collectAsState()
     val context = LocalContext.current
+    val openVideo = rememberVideoPlay()
     var showNoPlayerDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(playRequest) {
         playRequest?.let { unrestricted ->
-            if (!playVideo(context, unrestricted.download, unrestricted.filename)) {
+            if (!openVideo(unrestricted.download, unrestricted.filename)) {
                 showNoPlayerDialog = true
             }
             viewModel.consumePlayRequest()

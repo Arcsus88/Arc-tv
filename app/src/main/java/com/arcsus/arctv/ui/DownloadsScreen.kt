@@ -45,6 +45,7 @@ import com.arcsus.arctv.data.FilenameParser
 fun DownloadsScreen(viewModel: DownloadsViewModel) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
+    val openVideo = rememberVideoPlay()
     var showNoPlayerDialog by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 40.dp)) {
@@ -111,7 +112,7 @@ fun DownloadsScreen(viewModel: DownloadsViewModel) {
                         DownloadCard(
                             item = item,
                             onClick = {
-                                if (!playVideo(context, item.download, item.filename)) {
+                                if (!openVideo(item.download, item.filename)) {
                                     showNoPlayerDialog = true
                                 }
                             },

@@ -97,6 +97,7 @@ fun BrowseScreen(
     val detail by viewModel.detail.collectAsState()
     val playRequest by viewModel.playRequest.collectAsState()
     val context = LocalContext.current
+    val openVideo = rememberVideoPlay()
 
     // The next episode we're offering to auto-advance to, and the countdown.
     var autoNext by remember { mutableStateOf<NextEp?>(null) }
@@ -150,7 +151,7 @@ fun BrowseScreen(
         playRequest?.let { stream ->
             lastStream = stream
             launchedAt = System.currentTimeMillis()
-            if (!playVideo(context, stream.streamUrl, stream.filename)) {
+            if (!openVideo(stream.streamUrl, stream.filename)) {
                 launchedAt = 0L
                 android.widget.Toast.makeText(
                     context, "No video player installed.", android.widget.Toast.LENGTH_LONG,
@@ -234,7 +235,7 @@ fun BrowseScreen(
                     quickExit = null
                     lastStream = stream
                     launchedAt = System.currentTimeMillis()
-                    if (!playVideo(context, stream.streamUrl, stream.filename)) {
+                    if (!openVideo(stream.streamUrl, stream.filename)) {
                         launchedAt = 0L
                         android.widget.Toast.makeText(
                             context, "No video player installed.", android.widget.Toast.LENGTH_LONG,

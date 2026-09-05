@@ -26,6 +26,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -150,36 +151,42 @@ fun SettingsScreen(viewModel: SettingsViewModel, updateViewModel: UpdateViewMode
             }
         }
 
-        item { SectionTitle("Live TV") }
+        item { SectionTitle("Players") }
 
         item {
+            // Which installed app opens what. Films and series go to the
+            // player that handles the file (VLC decodes DTS audio; the TV's
+            // own player often doesn't); live TV can also use Arc's player.
+            val context = LocalContext.current
+            val players = remember { installedVideoPlayers(context) }
             Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ArcChip(
-                        label = "Arc TV",
-                        selected = state.liveInAppPlayer,
-                        onClick = { viewModel.setLiveInAppPlayer(true) },
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    ArcChip(
-                        label = "External player",
-                        selected = !state.liveInAppPlayer,
-                        onClick = { viewModel.setLiveInAppPlayer(false) },
-                    )
-                }
+                PlayerChoice(
+                    title = "Films & series",
+                    current = state.moviePlayer,
+                    players = players,
+                    includeArc = false,
+                    onPick = { viewModel.saveMoviePlayer(it) },
+                )
+                Spacer(Modifier.height(14.dp))
+                PlayerChoice(
+                    title = "Live TV",
+                    current = state.livePlayer,
+                    players = players,
+                    includeArc = true,
+                    onPick = { viewModel.saveLivePlayer(it) },
+                )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    if (state.liveInAppPlayer) {
-                        "Channels play inside Arc. Up and down on the remote change channel, OK shows what's on, BACK returns."
-                    } else {
-                        "Channels open in VLC or whichever player you choose. Pick this when the player, " +
-                            "but not Arc TV, sits in your VPN's app list."
-                    },
+                    "System default is whatever the TV opens video with. Ask each time shows the chooser. " +
+                        "Arc TV's own live player changes channel with up and down, but uses Arc's network " +
+                        "route -- pick an external player if only that player sits in your VPN's app list.",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
+
+        item { SectionTitle("Live TV") }
 
         item {
             Column {
@@ -241,6 +248,35 @@ fun SettingsScreen(viewModel: SettingsViewModel, updateViewModel: UpdateViewMode
         }
 
         item { AddPlaylistForm(onAdd = { viewModel.addPlaylist(it) }) }
+    }
+}
+
+/** One row of player chips: default, chooser, (Arc), then every installed video app. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun PlayerChoice(
+    title: String,
+    current: String,
+    players: List<PlayerApp>,
+    includeArc: Boolean,
+    onPick: (String) -> Unit,
+) {
+    Column {
+        Text(title, style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(6.dp))
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ArcChip(label = "System default", selected = current == PLAYER_DEFAULT, onClick = { onPick(PLAYER_DEFAULT) })
+            ArcChip(label = "Ask each time", selected = current == PLAYER_ASK, onClick = { onPick(PLAYER_ASK) })
+            if (includeArc) {
+                ArcChip(label = "Arc TV", selected = current == PLAYER_ARC, onClick = { onPick(PLAYER_ARC) })
+            }
+            players.forEach { app ->
+                ArcChip(label = app.label, selected = current == app.packageName, onClick = { onPick(app.packageName) })
+            }
+        }
     }
 }
 

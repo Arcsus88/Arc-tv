@@ -81,6 +81,8 @@ class SettingsStore(context: Context) {
         val FAVORITE_CHANNELS = stringPreferencesKey("favorite_channels")
         val CONTINUE_WATCHING = stringPreferencesKey("continue_watching")
         val LIVE_REGION = stringPreferencesKey("live_region")
+        val MOVIE_PLAYER = stringPreferencesKey("movie_player")
+        val LIVE_PLAYER = stringPreferencesKey("live_player")
         val LIVE_SETUP_DONE = androidx.datastore.preferences.core.booleanPreferencesKey("live_setup_done")
         val LIVE_IN_APP_PLAYER = androidx.datastore.preferences.core.booleanPreferencesKey("live_in_app_player")
     }
@@ -98,15 +100,27 @@ class SettingsStore(context: Context) {
     }
 
     /**
-     * Play live channels in Arc's own player rather than an external app.
-     * Off by default: an external player can sit inside the VPN's app list
-     * while Arc TV stays outside it, and Arc's player can only use whatever
-     * route the VPN gives Arc TV itself.
+     * Which app opens films and series: "" for the system default, "ask" for
+     * the chooser, or a package name.
      */
-    val liveInAppPlayer: Flow<Boolean> = dataStore.data.map { it[Keys.LIVE_IN_APP_PLAYER] ?: false }
+    val moviePlayer: Flow<String> = dataStore.data.map { it[Keys.MOVIE_PLAYER].orEmpty() }
 
-    suspend fun setLiveInAppPlayer(enabled: Boolean) {
-        dataStore.edit { it[Keys.LIVE_IN_APP_PLAYER] = enabled }
+    suspend fun saveMoviePlayer(player: String) {
+        dataStore.edit { it[Keys.MOVIE_PLAYER] = player }
+    }
+
+    /**
+     * Which app opens live channels: as above, plus "arc" for Arc's own
+     * player. Defaults to the system default: an external player can sit
+     * inside the VPN's app list while Arc TV stays outside it. (Carries the
+     * older on/off switch forward for anyone who had turned Arc's player on.)
+     */
+    val livePlayer: Flow<String> = dataStore.data.map { prefs ->
+        prefs[Keys.LIVE_PLAYER] ?: if (prefs[Keys.LIVE_IN_APP_PLAYER] == true) "arc" else ""
+    }
+
+    suspend fun saveLivePlayer(player: String) {
+        dataStore.edit { it[Keys.LIVE_PLAYER] = player }
     }
 
     val torboxToken: Flow<String> = dataStore.data.map { it[Keys.TORBOX_TOKEN].orEmpty() }

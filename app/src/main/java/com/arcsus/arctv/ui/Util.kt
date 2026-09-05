@@ -43,17 +43,51 @@ fun formatDate(iso: String): String {
  * Hands the URL to an external video player (VLC, Just Player, …).
  * Returns false when no player is installed.
  */
-fun playVideo(context: Context, url: String, title: String? = null): Boolean {
+/** Player choices stored in Settings: the system default, the chooser, Arc's own live player, or a package name. */
+const val PLAYER_DEFAULT = ""
+const val PLAYER_ASK = "ask"
+const val PLAYER_ARC = "arc"
+
+/** A video app on this TV that can take a stream URL. */
+data class PlayerApp(val label: String, val packageName: String)
+
+/** Every installed app that opens video links, Arc itself excluded. */
+fun installedVideoPlayers(context: Context): List<PlayerApp> {
+    val probe = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(Uri.parse("http://example.com/video.mkv"), "video/*")
+    }
+    val pm = context.packageManager
+    val found = runCatching { pm.queryIntentActivities(probe, android.content.pm.PackageManager.MATCH_ALL) }
+        .getOrDefault(emptyList())
+    return found
+        .mapNotNull { info ->
+            val pkg = info.activityInfo?.packageName ?: return@mapNotNull null
+            if (pkg == context.packageName) return@mapNotNull null
+            val label = info.loadLabel(pm)?.toString()?.takeIf { it.isNotBlank() } ?: pkg
+            PlayerApp(label, pkg)
+        }
+        .distinctBy { it.packageName }
+        .sortedBy { it.label.lowercase(Locale.getDefault()) }
+}
+
+/**
+ * Open a stream in the chosen player: the system default, the "Open with"
+ * chooser, or a specific app. An app that has since been uninstalled falls
+ * back to the default rather than failing.
+ */
+fun playVideo(context: Context, url: String, title: String? = null, player: String = PLAYER_DEFAULT): Boolean {
+    if (player == PLAYER_ASK) return playVideoWith(context, url, title)
     val intent = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(Uri.parse(url), "video/*")
         if (!title.isNullOrBlank()) putExtra("title", title)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (player.isNotBlank() && player != PLAYER_ARC) setPackage(player)
     }
     return try {
         context.startActivity(intent)
         true
     } catch (e: ActivityNotFoundException) {
-        false
+        if (intent.`package` != null) playVideo(context, url, title, PLAYER_DEFAULT) else false
     }
 }
 

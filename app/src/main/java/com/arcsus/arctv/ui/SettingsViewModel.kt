@@ -44,7 +44,8 @@ class SettingsViewModel(
         val rdConnected: Boolean = false,
         val adConnected: Boolean = false,
         val torboxToken: String = "",
-        val liveInAppPlayer: Boolean = false,
+        val moviePlayer: String = "",
+        val livePlayer: String = "",
         val liveRegion: String = "UK",
         val playlists: List<SavedPlaylist> = emptyList(),
         val connect: ConnectState = ConnectState.Idle,
@@ -80,7 +81,10 @@ class SettingsViewModel(
             settingsStore.torboxToken.collect { _state.value = _state.value.copy(torboxToken = it) }
         }
         viewModelScope.launch {
-            settingsStore.liveInAppPlayer.collect { _state.value = _state.value.copy(liveInAppPlayer = it) }
+            settingsStore.moviePlayer.collect { _state.value = _state.value.copy(moviePlayer = it) }
+        }
+        viewModelScope.launch {
+            settingsStore.livePlayer.collect { _state.value = _state.value.copy(livePlayer = it) }
         }
         viewModelScope.launch {
             settingsStore.liveRegion.collect { _state.value = _state.value.copy(liveRegion = it) }
@@ -200,8 +204,12 @@ class SettingsViewModel(
         viewModelScope.launch { settingsStore.saveLiveRegion(region) }
     }
 
-    fun setLiveInAppPlayer(enabled: Boolean) {
-        viewModelScope.launch { settingsStore.setLiveInAppPlayer(enabled) }
+    fun saveMoviePlayer(player: String) {
+        viewModelScope.launch { settingsStore.saveMoviePlayer(player) }
+    }
+
+    fun saveLivePlayer(player: String) {
+        viewModelScope.launch { settingsStore.saveLivePlayer(player) }
     }
 
     fun saveTorboxToken(token: String) {
