@@ -281,6 +281,12 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
         .distinctBy { it.title }
         .map { row -> row.copy(items = row.items.distinctBy { it.type + it.id }) }
     val heroItems = state.rows.firstOrNull()?.items?.take(10).orEmpty()
+    // Titled key art for every tile on the page (posters stand in until it
+    // arrives, and for titles that have none).
+    val tileArt by viewModel.tileArt.collectAsState()
+    LaunchedEffect(rows, state.continueWatching) {
+        viewModel.loadTileArt(rows.flatMap { it.items } + state.continueWatching.mapNotNull { it.item })
+    }
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(24.dp),
         contentPadding = PaddingValues(bottom = 32.dp),
@@ -297,6 +303,7 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
                     onOpen = { viewModel.openDetails(it) },
                     rowTitle = rows.first().title,
                     rowItems = rows.first().items,
+                    tileArt = tileArt,
                     onMore = { tv -> viewModel.setTab(if (tv) BrowseTab.TV else BrowseTab.MOVIES) },
                 )
             }
@@ -306,7 +313,7 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
         // episode, channels tune straight in. Hold OK on a tile to drop it.
         if (state.continueWatching.isNotEmpty()) {
             item(key = "__continue") {
-                ContinueWatchingRow(state.continueWatching, viewModel)
+                ContinueWatchingRow(state.continueWatching, tileArt, viewModel)
             }
         }
         items(if (showHero) rows.drop(1) else rows, key = { it.title }) { row ->
@@ -323,7 +330,9 @@ private fun CatalogRows(viewModel: BrowseViewModel) {
                     contentPadding = PaddingValues(horizontal = 40.dp, vertical = 12.dp),
                 ) {
                     items(row.items, key = { it.type + it.id }) { item ->
-                        LandscapeTile(item, Modifier.width(LANDSCAPE_WIDTH)) { viewModel.openDetails(item) }
+                        LandscapeTile(item, tileArt["${item.type}:${item.id}"], Modifier.width(LANDSCAPE_WIDTH)) {
+                            viewModel.openDetails(item)
+                        }
                     }
                     // Sky's "More Top Picks" closer: jumps to the full catalogue.
                     val moreType = row.items.firstOrNull()?.type
@@ -354,6 +363,7 @@ private fun HeroBanner(
     onOpen: (CatalogItem) -> Unit,
     rowTitle: String,
     rowItems: List<CatalogItem>,
+    tileArt: Map<String, String>,
     onMore: (Boolean) -> Unit,
 ) {
     var index by remember(items) { mutableStateOf(0) }
@@ -506,7 +516,9 @@ private fun HeroBanner(
                 contentPadding = PaddingValues(horizontal = 40.dp, vertical = 12.dp),
             ) {
                 items(rowItems, key = { it.type + it.id }) { rowItem ->
-                    LandscapeTile(rowItem, Modifier.width(LANDSCAPE_WIDTH)) { onOpen(rowItem) }
+                    LandscapeTile(rowItem, tileArt["${rowItem.type}:${rowItem.id}"], Modifier.width(LANDSCAPE_WIDTH)) {
+                        onOpen(rowItem)
+                    }
                 }
                 val moreType = rowItems.firstOrNull()?.type
                 if (moreType != null && !rowTitle.startsWith("\u2665")) {
@@ -675,8 +687,14 @@ private val LANDSCAPE_WIDTH = 236.dp
  * A Sky Q "top picks" tile: 16:9 artwork, a small badge and the title in
  * the bottom-left over a scrim, a white outline on focus.
  */
+/**
+ * A Sky-style landscape tile. [art] is the titled key art: null while it is
+ * still being fetched (the tile stays blank rather than flashing the wrong
+ * picture), "" when the title has none -- then the poster stands in, since
+ * a textless scene still reads as the wrong film.
+ */
 @Composable
-private fun LandscapeTile(item: CatalogItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun LandscapeTile(item: CatalogItem, art: String?, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val shape = RoundedCornerShape(6.dp)
     Card(
         onClick = onClick,
@@ -693,15 +711,22 @@ private fun LandscapeTile(item: CatalogItem, modifier: Modifier = Modifier, onCl
                 .aspectRatio(16f / 9f)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(item.backdrop.ifBlank { item.poster })
-                    .crossfade(180)
-                    .build(),
-                contentDescription = item.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
+            val picture = when {
+                art == null -> null
+                art.isNotBlank() -> art
+                else -> item.poster.ifBlank { item.backdrop }
+            }
+            if (picture != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(picture)
+                        .crossfade(180)
+                        .build(),
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
             Box(
                 Modifier
                     .align(Alignment.BottomCenter)
@@ -735,7 +760,11 @@ private fun LandscapeTile(item: CatalogItem, modifier: Modifier = Modifier, onCl
 }
 
 @Composable
-private fun ContinueWatchingRow(entries: List<com.arcsus.arctv.data.WatchEntry>, viewModel: BrowseViewModel) {
+private fun ContinueWatchingRow(
+    entries: List<com.arcsus.arctv.data.WatchEntry>,
+    tileArt: Map<String, String>,
+    viewModel: BrowseViewModel,
+) {
     val playLive = rememberLivePlay()
     Column {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 40.dp)) {
@@ -759,6 +788,7 @@ private fun ContinueWatchingRow(entries: List<com.arcsus.arctv.data.WatchEntry>,
             items(entries, key = { it.key }) { entry ->
                 ContinueTile(
                     entry = entry,
+                    art = entry.item?.let { tileArt["${it.type}:${it.id}"] },
                     onOpen = {
                         val channel = entry.channel
                         if (entry.kind == "live" && channel != null) {
@@ -790,7 +820,12 @@ private fun ContinueWatchingRow(entries: List<com.arcsus.arctv.data.WatchEntry>,
  * ("Next up  S2 E6"), or a channel's logo on the panel colour with "Live".
  */
 @Composable
-private fun ContinueTile(entry: com.arcsus.arctv.data.WatchEntry, onOpen: () -> Unit, onRemove: () -> Unit) {
+private fun ContinueTile(
+    entry: com.arcsus.arctv.data.WatchEntry,
+    art: String?,
+    onOpen: () -> Unit,
+    onRemove: () -> Unit,
+) {
     val shape = RoundedCornerShape(6.dp)
     val item = entry.item
     val channel = entry.channel
@@ -811,9 +846,10 @@ private fun ContinueTile(entry: com.arcsus.arctv.data.WatchEntry, onOpen: () -> 
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             if (item != null) {
+                val picture = if (art.isNullOrBlank()) item.poster.ifBlank { item.backdrop } else art
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(item.backdrop.ifBlank { item.poster })
+                        .data(picture)
                         .crossfade(180)
                         .build(),
                     contentDescription = item.title,

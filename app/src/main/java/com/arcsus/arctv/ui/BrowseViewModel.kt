@@ -24,6 +24,9 @@ import kotlinx.coroutines.launch
 
 enum class BrowseTab { HOME, MOVIES, TV }
 
+/** Tiles per titled-art request; the server fans each out to TMDB in parallel. */
+private const val TILE_ART_BATCH = 20
+
 /** The episode that plays after the current one (may be in the next season). */
 data class NextEp(val season: Int, val episode: Int)
 
@@ -105,6 +108,28 @@ class BrowseViewModel(
     /** Backdrop URLs for the trending hero, keyed "type:id" ("" = pending/none). */
     private val _heroArt = MutableStateFlow<Map<String, String>>(emptyMap())
     val heroArt: StateFlow<Map<String, String>> = _heroArt
+
+    /**
+     * Titled key art per tile, keyed "type:id". Absent = not fetched yet;
+     * "" = TMDB has none (the tile falls back to the poster).
+     */
+    private val _tileArt = MutableStateFlow<Map<String, String>>(emptyMap())
+    val tileArt: StateFlow<Map<String, String>> = _tileArt
+    private val tileArtRequested = HashSet<String>()
+
+    /** Fetch titled art for tiles not asked for yet, twenty at a time. */
+    fun loadTileArt(items: List<CatalogItem>) {
+        val fresh = items.filter { tileArtRequested.add("${it.type}:${it.id}") }.distinctBy { "${it.type}:${it.id}" }
+        if (fresh.isEmpty()) return
+        fresh.chunked(TILE_ART_BATCH).forEach { batch ->
+            viewModelScope.launch {
+                val got = runCatching { repository.art(batch) }.getOrDefault(emptyMap())
+                // Anything the server didn't answer for falls back to the poster.
+                val filled = batch.associate { "${it.type}:${it.id}" to got["${it.type}:${it.id}"].orEmpty() }
+                _tileArt.update { it + filled }
+            }
+        }
+    }
 
     /** Fetch the wide backdrop for a hero item once (shares the details cache). */
     fun loadHeroArt(item: CatalogItem) {

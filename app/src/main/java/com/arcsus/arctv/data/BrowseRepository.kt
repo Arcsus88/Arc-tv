@@ -40,6 +40,9 @@ data class Genre(val id: Int = 0, val name: String = "")
 data class Genres(val movie: List<Genre> = emptyList(), val tv: List<Genre> = emptyList())
 
 @Serializable
+data class ArtResponse(val art: Map<String, String> = emptyMap())
+
+@Serializable
 data class DiscoverPage(
     val items: List<CatalogItem> = emptyList(),
     val page: Int = 1,
@@ -158,6 +161,24 @@ class BrowseRepository(
     suspend fun details(item: CatalogItem): TitleDetails = call { t ->
         val body = buildJsonObject { put("action", "details"); put("id", item.id); put("type", item.type) }
         json.decodeFromString<TitleDetails>(post(body, t))
+    }
+
+    /**
+     * Titled key art for tiles: TMDB's English-tagged backdrops carry the
+     * title graphic, the way Sky's landscape tiles do. Keys are "type:id";
+     * an empty value means TMDB has none for that title.
+     */
+    suspend fun art(items: List<CatalogItem>): Map<String, String> = call { t ->
+        val body = buildJsonObject {
+            put("action", "art")
+            put(
+                "items",
+                kotlinx.serialization.json.buildJsonArray {
+                    items.forEach { add(buildJsonObject { put("id", it.id); put("type", it.type) }) }
+                },
+            )
+        }
+        json.decodeFromString<ArtResponse>(post(body, t)).art
     }
 
     suspend fun discover(type: String, genreId: Int?, sort: String, page: Int): DiscoverPage = call { t ->
