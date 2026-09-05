@@ -971,9 +971,9 @@ private fun WideTile(
     onFocus: ((CatalogItem) -> Unit)? = null,
     onClick: () -> Unit,
 ) {
-    // Poster-shaped (2:3), like the artwork itself: taller, bigger, and the
-    // title sits on a scrim at the foot. Focus lifts the tile with a soft
-    // accent glow and a white keyline.
+    // Poster-shaped (2:3), like the artwork itself, and nothing but the
+    // artwork. Focus lifts the tile with a soft accent glow and a white
+    // keyline.
     val shape = RoundedCornerShape(10.dp)
     Card(
         onClick = onClick,
@@ -1005,49 +1005,21 @@ private fun WideTile(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-            Box(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(96.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.92f)),
-                        ),
-                    ),
-            )
-            Column(
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(horizontal = 10.dp, vertical = 9.dp),
-            ) {
-                if (showType) {
-                    Text(
-                        if (item.isTv) "TV" else "Film",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ArcBlue,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 5.dp, vertical = 1.dp),
-                    )
-                    Spacer(Modifier.height(4.dp))
-                }
+            // No caption: a poster already says what it is, and a title on a
+            // scrim only covered its foot. Search mixes films and series, so
+            // there a small badge tells them apart.
+            if (showType) {
                 Text(
-                    item.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    if (item.isTv) "TV" else "Film",
+                    style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
                 )
-                if (item.year.isNotBlank()) {
-                    Text(
-                        item.year,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.72f),
-                    )
-                }
             }
         }
     }
