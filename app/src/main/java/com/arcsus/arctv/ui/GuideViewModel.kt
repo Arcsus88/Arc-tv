@@ -8,6 +8,8 @@ import com.arcsus.arctv.data.LiveRepository
 import com.arcsus.arctv.data.SavedChannel
 import com.arcsus.arctv.data.SavedPlaylist
 import com.arcsus.arctv.data.SettingsStore
+import com.arcsus.arctv.data.SkyChannel
+import com.arcsus.arctv.data.SkyEpg
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -26,6 +28,28 @@ class GuideViewModel(
     companion object {
         /** Virtual guide group holding the user's hearted channels. */
         const val FAV_GROUP = "♥ Favourites"
+
+        /** Channels per group dressed from Sky's guide (the web guide shows 60). */
+        private const val SKY_MAX_CHANNELS = 150
+
+        /** "UK | Sports" -> ["uk", "sport"]: lower-case words, plural "s" dropped. */
+        internal fun wordsOf(name: String): List<String> =
+            name.lowercase().split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }
+                .map { if (it.length > 3 && it.endsWith("s")) it.dropLast(1) else it }
+
+        /**
+         * The playlist group a label like "UK Sports" means, whatever the
+         * panel's spelling ("UK | Sports", "UK: SPORTS", "UK SPORTS FHD"):
+         * every word of the label must be in the group's name; the fewest
+         * extra words wins, then the bigger group. (The web guide's findGroup.)
+         */
+        internal fun findGroup(groups: List<GuideGroup>, label: String): String? {
+            val want = wordsOf(label)
+            return groups
+                .filter { g -> wordsOf(g.name).containsAll(want) }
+                .minWithOrNull(compareBy<GuideGroup> { wordsOf(it.name).size - want.size }.thenByDescending { it.count })
+                ?.name
+        }
     }
 
     data class UiState(
@@ -42,12 +66,22 @@ class GuideViewModel(
         val epgLoading: Boolean = false,
         val error: String? = null,
         val nowMs: Long = System.currentTimeMillis(),
+        /** Sky's numbers, logos, stills and listings, by channel URL. */
+        val sky: Map<String, SkyChannel> = emptyMap(),
+        /** Sky's guide for the current group is still on its way. */
+        val skyLoading: Boolean = false,
+        /** Open the group picker with this search (a banner's group the playlist lacks). */
+        val pickerRequest: String? = null,
     )
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state
 
     private var epgJob: Job? = null
+    private var skyJob: Job? = null
+
+    /** A group to open on once the playlist's groups are known (from a home banner). */
+    private var pendingFocus: String? = null
 
     init {
         viewModelScope.launch {
@@ -68,7 +102,10 @@ class GuideViewModel(
                         )
                     },
                 )
-                if (currentGroup(_state.value) == FAV_GROUP) refreshEpg()
+                if (currentGroup(_state.value) == FAV_GROUP) {
+                    refreshEpg()
+                    refreshSky()
+                }
             }
         }
         viewModelScope.launch {
@@ -119,7 +156,7 @@ class GuideViewModel(
                         groups = groups,
                         loading = false,
                     )
-                    ensureGroupLoaded()
+                    if (!applyPendingFocus()) ensureGroupLoaded()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -155,6 +192,35 @@ class GuideViewModel(
         }
     }
 
+    /**
+     * Open the guide on a group by its everyday name -- the home page's Sky
+     * Sports banner asks for "UK Sports". The group joins the guide's groups
+     * and is shown; a playlist with no such group gets the picker, searching
+     * for the closest ones ("sport"), as on the web.
+     */
+    fun openGroup(label: String) {
+        pendingFocus = label
+        applyPendingFocus()
+    }
+
+    private fun applyPendingFocus(): Boolean {
+        val label = pendingFocus ?: return false
+        val s = _state.value
+        if (s.loading || s.groups.isEmpty()) return false
+        pendingFocus = null
+        val target = findGroup(s.groups, label)
+        if (target != null) {
+            addGroup(target)
+        } else {
+            _state.value = s.copy(pickerRequest = wordsOf(label).lastOrNull().orEmpty())
+        }
+        return true
+    }
+
+    fun consumePickerRequest() {
+        _state.value = _state.value.copy(pickerRequest = null)
+    }
+
     fun selectGroup(name: String) {
         viewModelScope.launch { settingsStore.saveActiveGuideGroup(name) }
     }
@@ -188,6 +254,7 @@ class GuideViewModel(
         val group = currentGroup(s) ?: return
         if (group == FAV_GROUP || s.loading || s.channels.any { it.group == group }) {
             refreshEpg()
+            refreshSky()
             return
         }
         groupLoadJob?.cancel()
@@ -211,6 +278,31 @@ class GuideViewModel(
             }
             _state.value = _state.value.copy(epgLoading = false)
             refreshEpg()
+            refreshSky()
+        }
+    }
+
+    /**
+     * Sky's guide for the current group: channel numbers and logos, a still
+     * and synopsis per programme, and listings for channels the panel's EPG
+     * misses. A bonus -- if Sky is unreachable the panel's EPG still stands.
+     */
+    private fun refreshSky() {
+        val s = _state.value
+        val group = currentGroup(s) ?: return
+        val channels = channelsFor(s, group).take(SKY_MAX_CHANNELS)
+        if (channels.isEmpty()) return
+        skyJob?.cancel()
+        skyJob = viewModelScope.launch {
+            _state.value = _state.value.copy(skyLoading = true)
+            val guide = try {
+                SkyEpg.guide(channels)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                emptyMap()
+            }
+            _state.value = _state.value.copy(sky = _state.value.sky + guide, skyLoading = false)
         }
     }
 

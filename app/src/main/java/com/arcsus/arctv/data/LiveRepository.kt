@@ -33,6 +33,8 @@ data class EpgEntry(
     val description: String,
     val start: Long,
     val stop: Long,
+    /** 16:9 programme still, when the source has one (Sky's EPG does). */
+    val image: String = "",
 )
 
 /**

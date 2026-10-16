@@ -1,5 +1,6 @@
 package com.arcsus.arctv.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -74,17 +76,20 @@ fun TvEditField(
         onDeactivate()
     }
 
+    // The web's input: a surface-filled field with a hairline border, the
+    // accent while typing; focus is the app-wide white keyline.
     val borderColor = when {
         active -> ArcBlue
-        focused -> MaterialTheme.colorScheme.onSurface
-        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+        focused -> Color.White
+        else -> MaterialTheme.colorScheme.borderVariant
     }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
-            .border(2.dp, borderColor, shape)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .background(MaterialTheme.colorScheme.surface, shape)
+            .border(if (active || focused) 2.dp else 1.dp, borderColor, shape)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         if (leadingIcon != null) {
             leadingIcon()

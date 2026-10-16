@@ -1,136 +1,138 @@
 package com.arcsus.arctv.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.requiredWidth
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.ListAlt
-import androidx.compose.material.icons.filled.LiveTv
-import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Tv
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.Border
-import androidx.compose.foundation.BorderStroke
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.arcsus.arctv.ui.theme.ArcBackground
 import com.arcsus.arctv.ui.theme.ArcBlue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.runtime.rememberCoroutineScope
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
- * How long focus must rest on a rail item before its section opens. Long
+ * How long focus must rest on a menu item before its section opens. Long
  * enough to travel past a section without loading it, short enough that
  * stopping on one feels immediate.
  */
-private const val RAIL_SETTLE_MS = 280L
+private const val NAV_SETTLE_MS = 280L
 
 /** A D-pad press older than this cannot be the reason focus arrived somewhere. */
 private const val DELIBERATE_NS = 600_000_000L
 
-/** How long after the content lost focus a landing on the rail counts as stray. */
+/** How long after the content lost focus a landing on the menu counts as stray. */
 private const val STRAY_NS = 1_500_000_000L
 
 /**
- * Where focus was when the last D-pad press happened. Focus can arrive on the
- * rail for two very different reasons: the viewer moved there (LEFT out of
- * the content, or UP/DOWN along the rail), or the platform put it there
+ * Where focus was when the last D-pad press happened. Focus can arrive on
+ * the menu for two very different reasons: the viewer moved there (UP out of
+ * the content, or LEFT/RIGHT along the menu), or the platform put it there
  * because whatever was focused vanished -- a pressed group card removed with
  * its grid, a list refetched. Android TVs are not in touch mode, so the
  * moment the focused view goes, View.clearFocus hands focus to the first
- * focusable on screen: the rail's top item. Only the first kind is a reason
- * to change section.
+ * focusable on screen: the menu. Only the first kind is a reason to change
+ * section.
  */
 private class NavIntent {
     private var at = 0L
     private var key: Key? = null
-    private var fromRail = false
+    private var fromNav = false
     private var fromContent = false
 
-    fun record(pressed: Key, railHadFocus: Boolean, contentHadFocus: Boolean) {
+    fun record(pressed: Key, navHadFocus: Boolean, contentHadFocus: Boolean) {
         at = System.nanoTime()
         key = pressed
-        fromRail = railHadFocus
+        fromNav = navHadFocus
         fromContent = contentHadFocus
     }
 
-    /** True if a rail item gaining focus right now is the viewer's doing. */
-    fun deliberateRailMove(): Boolean {
-        if (at == 0L) return false
-        val age = System.nanoTime() - at
-        if (age !in 0..DELIBERATE_NS) return false
-        return fromRail || (key == Key.DirectionLeft && fromContent)
-    }
+    private fun recent(): Boolean = at != 0L && System.nanoTime() - at in 0..DELIBERATE_NS
+
+    /** True if a menu item gaining focus right now is the viewer's doing. */
+    fun deliberateNavMove(): Boolean = recent() && (fromNav || (key == Key.DirectionUp && fromContent))
+
+    /** True if focus just came up out of the content into the menu. */
+    fun cameUpFromContent(): Boolean = recent() && key == Key.DirectionUp && fromContent
 }
 
 /**
- * Safe margin between the screen edge and content. Modest: most sets show
- * the whole picture, and a big inset stacked on each screen's own gutter
- * left an empty band all the way round. Panels (the rail) run to the edge;
- * only what's inside them is inset.
+ * Safe margin between the screen edge and content: about 4% of the width,
+ * Netflix's TV gutter. Panels and artwork run to the edge; only what's
+ * inside them is inset.
  */
-internal val TV_INSET_H = 20.dp
+internal val TV_INSET_H = 40.dp
 internal val TV_INSET_V = 14.dp
 
-/** The rail's two widths (before the inset): open with labels, closed to icons. */
-private val RAIL_OPEN_WIDTH = 214.dp
-private val RAIL_CLOSED_WIDTH = 64.dp
+/** Height of the top menu; screens start below it (Home's artwork runs under it). */
+internal val NAV_HEIGHT = 56.dp
+
+/** The top-level sections, in menu order. */
+internal object Section {
+    const val HOME = "Home"
+    const val SHOWS = "Shows"
+    const val MOVIES = "Movies"
+    const val DISNEY = "Disney"
+    const val NETFLIX = "Netflix"
+    const val LIVE = "Live TV"
+    const val GUIDE = "Guide"
+    const val DOWNLOADS = "Downloads"
+    const val TORRENTS = "Torrents"
+    const val SETTINGS = "Settings"
+}
+
+/** The guide group the home page's Sky Sports banner opens (the web app's SKY_SPORTS_GROUP). */
+internal const val SKY_SPORTS_GROUP = "UK Sports"
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -144,112 +146,118 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
     val settingsViewModel: SettingsViewModel = viewModel(factory = factory)
 
     val settingsState by settingsViewModel.state.collectAsState()
-    // Downloads/Torrents browse the Real-Debrid account, so they only appear
-    // when Real-Debrid is connected (AllDebrid-only setups hide them).
-    // Movies and TV Shows are rail sections like Sky's menu; all three render
-    // the Browse screen in the matching mode.
-    val tabs = if (settingsState.rdConnected) {
-        listOf("Browse", "Movies", "TV Shows", "Live", "Guide", "Downloads", "Torrents", "Settings")
-    } else {
-        listOf("Browse", "Movies", "TV Shows", "Live", "Guide", "Settings")
+    // Netflix's TV menu, across the top: Home, Shows, Movies, then Arc's own
+    // sections. Downloads/Torrents browse the Real-Debrid account, so they
+    // only appear when Real-Debrid is connected. Settings sits at the far
+    // end as a gear, like the web app's header.
+    val sections = buildList {
+        addAll(listOf(Section.HOME, Section.SHOWS, Section.MOVIES, Section.DISNEY, Section.NETFLIX, Section.LIVE, Section.GUIDE))
+        if (settingsState.rdConnected) addAll(listOf(Section.DOWNLOADS, Section.TORRENTS))
+        add(Section.SETTINGS)
     }
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-    if (selectedTab >= tabs.size) selectedTab = tabs.size - 1
+    var selectedName by rememberSaveable { mutableStateOf(Section.HOME) }
+    if (selectedName !in sections) selectedName = Section.HOME
     var searchOpen by rememberSaveable { mutableStateOf(false) }
 
-    // Opening a section mounts a whole screen and starts its loading. Rail
-    // focus therefore only *proposes* a section: travelling down the rail used
-    // to open -- and start fetching for -- every section it passed through,
-    // which is what made moving around the menu crawl. Pressing OK commits at
-    // once; resting on an item commits shortly after.
-    val openSection: (Int) -> Unit = { index ->
-        selectedTab = index
-        when (tabs.getOrNull(index)) {
-            "Browse" -> browseViewModel.setTab(BrowseTab.HOME)
-            "Movies" -> browseViewModel.setTab(BrowseTab.MOVIES)
-            "TV Shows" -> browseViewModel.setTab(BrowseTab.TV)
+    // Opening a section mounts a whole screen and starts its loading. Menu
+    // focus therefore only *proposes* a section: travelling along the menu
+    // used to open -- and start fetching for -- every section it passed
+    // through. Pressing OK commits at once; resting on an item commits
+    // shortly after.
+    val openSection: (String) -> Unit = { name ->
+        selectedName = name
+        when (name) {
+            Section.HOME -> browseViewModel.setTab(BrowseTab.HOME)
+            Section.MOVIES -> browseViewModel.setTab(BrowseTab.MOVIES)
+            Section.SHOWS -> browseViewModel.setTab(BrowseTab.TV)
+            Section.DISNEY -> browseViewModel.setTab(BrowseTab.DISNEY)
+            Section.NETFLIX -> browseViewModel.setTab(BrowseTab.NETFLIX)
         }
     }
-    var railHasFocus by remember { mutableStateOf(false) }
+    var navHasFocus by remember { mutableStateOf(false) }
     var contentHasFocus by remember { mutableStateOf(false) }
     var contentLostFocusAt by remember { mutableLongStateOf(0L) }
     val nav = remember { NavIntent() }
     val contentFocus = remember { FocusRequester() }
+    val navFocus = remember { mutableMapOf<String, FocusRequester>() }
     val scope = rememberCoroutineScope()
 
-    var proposedTab by remember { mutableIntStateOf(-1) }
-    LaunchedEffect(proposedTab) {
-        if (proposedTab < 0 || proposedTab == selectedTab) return@LaunchedEffect
-        delay(RAIL_SETTLE_MS)
+    var proposed by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(proposed) {
+        val name = proposed ?: return@LaunchedEffect
+        if (name == selectedName) return@LaunchedEffect
+        delay(NAV_SETTLE_MS)
         // Still resting there? Focus that has since gone back into the
         // content -- by the viewer, or by the recovery below -- withdraws
         // the proposal.
-        if (railHasFocus) openSection(proposedTab)
+        if (navHasFocus) openSection(name)
     }
 
-    // A rail item took focus. Only a D-pad move counts as a proposal (see
-    // NavIntent). Focus the platform pushed onto the rail because the
-    // focused element vanished -- "I pressed Favourites and it sent me
-    // Home" -- goes back into the content, once the screen that lost it has
-    // had a couple of frames to place it itself.
-    val onRailItemFocused: (Int) -> Unit = { index ->
-        if (nav.deliberateRailMove()) {
-            proposedTab = index
+    // A menu item took focus. Only a D-pad move counts as a proposal (see
+    // NavIntent). Focus the platform pushed onto the menu because the
+    // focused element vanished goes back into the content, once the screen
+    // that lost it has had a couple of frames to place it itself.
+    val onNavItemFocused: (String) -> Unit = { name ->
+        if (nav.cameUpFromContent() && name != selectedName) {
+            // Netflix: coming up out of a section lands on that section's
+            // menu item, wherever above it focus happened to arrive.
+            scope.launch {
+                withFrameNanos { }
+                runCatching { navFocus[selectedName]?.requestFocus() }
+            }
+        } else if (nav.deliberateNavMove()) {
+            // Search (or any item that isn't a section) withdraws whatever
+            // was proposed on the way past.
+            proposed = name.takeIf { it in sections }
         } else if (contentLostFocusAt != 0L && System.nanoTime() - contentLostFocusAt in 0..STRAY_NS) {
             scope.launch {
                 repeat(3) { withFrameNanos { } }
-                if (!contentHasFocus && railHasFocus) runCatching { contentFocus.requestFocus() }
+                if (!contentHasFocus && navHasFocus) runCatching { contentFocus.requestFocus() }
             }
         }
     }
 
-    val liveState by liveViewModel.state.collectAsState()
-    val playLive = rememberLivePlay()
+    // Netflix: Back from anywhere in a section goes up to the menu; Back on
+    // the menu goes Home; Back on Home's menu leaves the app.
+    BackHandler(enabled = contentHasFocus || (navHasFocus && selectedName != Section.HOME)) {
+        if (contentHasFocus) {
+            runCatching { navFocus[selectedName]?.requestFocus() }
+        } else {
+            proposed = null
+            openSection(Section.HOME)
+            runCatching { navFocus[Section.HOME]?.requestFocus() }
+        }
+    }
 
-    // Sky Q layout: a left navigation rail (preview tile, vertical menu with
-    // the active section boxed, brand and clock at the foot) and the content
-    // filling the rest of the panel.
-    Row(
+    // A home banner asks for another section: Disney, Netflix, or the guide
+    // opened on the UK sports channels.
+    val openFromHome: (String) -> Unit = { name ->
+        if (name == Section.GUIDE) guideViewModel.openGroup(SKY_SPORTS_GROUP)
+        openSection(name)
+    }
+
+    Box(
         Modifier
             .fillMaxSize()
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
                         Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight ->
-                            nav.record(event.key, railHasFocus, contentHasFocus)
+                            nav.record(event.key, navHasFocus, contentHasFocus)
                     }
                 }
                 false
             },
     ) {
-        NavRail(
-            tabs = tabs,
-            selected = selectedTab,
-            onFocusChanged = { railHasFocus = it },
-            onSelect = { index ->
-                proposedTab = index
-                openSection(index)
-            },
-            onPreview = onRailItemFocused,
-            onSearch = {
-                selectedTab = 0
-                searchOpen = true
-            },
-            preview = liveState.favorites.firstOrNull(),
-            onPreviewClick = { channel ->
-                // Favourites are the zap list from the preview tile.
-                val favourites = liveState.favorites.map {
-                    com.arcsus.arctv.data.LiveChannel(
-                        id = "fav:${it.url}", name = it.name, logo = it.logo, group = "Favourites", url = it.url,
-                    )
-                }
-                playLive(favourites, favourites.indexOfFirst { it.url == channel.url }.coerceAtLeast(0))
-            },
-        )
-        Column(
+        Box(
             Modifier
-                .weight(1f)
-                .padding(top = 0.dp, end = TV_INSET_H)
+                .fillMaxSize()
+                // Always below the menu, Home included (its artwork reaches up
+                // under the menu by drawing past its bounds): 2D focus search
+                // compares the two groups' bounds, and a content group
+                // overlapping the menu is never "below" it, so DOWN from the
+                // menu found nothing.
+                .padding(top = NAV_HEIGHT)
                 .focusRequester(contentFocus)
                 .onFocusChanged { state ->
                     contentHasFocus = state.hasFocus
@@ -259,273 +267,206 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
                         // bring it back rather than leave the remote dead.
                         scope.launch {
                             delay(80)
-                            if (!railHasFocus && !contentHasFocus) runCatching { contentFocus.requestFocus() }
+                            if (!navHasFocus && !contentHasFocus) runCatching { contentFocus.requestFocus() }
                         }
                     }
                 }
-                // Up/down stays inside the content. Without this, a DPAD-down
-                // that finds nothing focusable below it -- a grid still
-                // reloading after picking a genre, say -- lets focus fall
-                // sideways into the rail, and rail items switch section the
-                // moment they take focus: pressing down under Movies dropped
-                // you into the Guide. The rail is still one LEFT away.
+                // Only UP leaves the content, and only into the menu. A
+                // DPAD-down or sideways press that finds nothing focusable --
+                // a grid still reloading after picking a genre, say -- would
+                // otherwise let focus fall into the menu, and menu items
+                // switch section once focus rests on them.
                 .focusProperties {
                     exit = { direction ->
-                        if (direction == FocusDirection.Up || direction == FocusDirection.Down) {
-                            FocusRequester.Cancel
-                        } else {
-                            FocusRequester.Default
-                        }
+                        if (direction == FocusDirection.Up) FocusRequester.Default else FocusRequester.Cancel
                     }
                 }
                 .focusGroup(),
         ) {
-            UpdateBanner(updateViewModel)
-            when (tabs[selectedTab]) {
-                "Browse", "Movies", "TV Shows" ->
-                    BrowseScreen(browseViewModel, searchOpen) { searchOpen = it }
-                "Live" -> LiveScreen(liveViewModel)
-                "Guide" -> GuideScreen(guideViewModel)
-                "Downloads" -> DownloadsScreen(downloadsViewModel)
-                "Torrents" -> TorrentsScreen(torrentsViewModel)
-                "Settings" -> SettingsScreen(settingsViewModel, updateViewModel)
+            when (selectedName) {
+                Section.HOME, Section.SHOWS, Section.MOVIES, Section.DISNEY, Section.NETFLIX ->
+                    BrowseScreen(
+                        viewModel = browseViewModel,
+                        searchOpen = searchOpen,
+                        onSearchOpenChange = { searchOpen = it },
+                        onOpenSection = openFromHome,
+                        canTakeFocus = { !navHasFocus },
+                    )
+                Section.LIVE -> LiveScreen(liveViewModel)
+                Section.GUIDE -> GuideScreen(guideViewModel)
+                Section.DOWNLOADS -> DownloadsScreen(downloadsViewModel)
+                Section.TORRENTS -> TorrentsScreen(torrentsViewModel)
+                Section.SETTINGS -> SettingsScreen(settingsViewModel, updateViewModel)
             }
+        }
+
+        Column(Modifier.fillMaxWidth().align(Alignment.TopStart)) {
+            TopNav(
+                sections = sections,
+                selected = selectedName,
+                requesterFor = { name -> navFocus.getOrPut(name) { FocusRequester() } },
+                onFocusChanged = { navHasFocus = it },
+                onFocused = onNavItemFocused,
+                onActivate = { name ->
+                    proposed = name
+                    openSection(name)
+                },
+                onSearch = {
+                    openSection(Section.HOME)
+                    searchOpen = true
+                },
+            )
+            UpdateBanner(updateViewModel)
         }
     }
 }
 
+/**
+ * Netflix's TV menu (2025 redesign): one row across the top of the screen,
+ * always there. The brand and search on the left, the sections as plain
+ * labels -- the one you're in white and bold, the rest dimmed -- and the
+ * clock and settings on the right. Focus is Netflix's white pill with black
+ * text. Coming up from the content lands on the section you're in.
+ */
 @Composable
-private fun NavRail(
-    tabs: List<String>,
-    selected: Int,
+private fun TopNav(
+    sections: List<String>,
+    selected: String,
+    requesterFor: (String) -> FocusRequester,
     onFocusChanged: (Boolean) -> Unit,
-    onSelect: (Int) -> Unit,
-    onPreview: (Int) -> Unit,
+    onFocused: (String) -> Unit,
+    onActivate: (String) -> Unit,
     onSearch: () -> Unit,
-    preview: com.arcsus.arctv.data.SavedChannel?,
-    onPreviewClick: (com.arcsus.arctv.data.SavedChannel) -> Unit,
 ) {
-    // Sky Q's rail, top to bottom: brand and clock, the live preview tile,
-    // the menu. It slims to icons while focus is in the content and opens
-    // again the moment focus returns.
-    var railFocused by remember { mutableStateOf(false) }
-    val expanded = railFocused
-    // The visible width animates; the contents do not. They are laid out at
-    // the open or closed width from the first frame and revealed by the
-    // moving edge -- laying text out at every in-between width wrapped the
-    // labels into columns of letters ("M / o / vi / es") mid-animation.
-    val targetWidth = (if (expanded) RAIL_OPEN_WIDTH else RAIL_CLOSED_WIDTH) + TV_INSET_H
-    val railWidth by androidx.compose.animation.core.animateDpAsState(
-        targetValue = targetWidth,
-        label = "railWidth",
-    )
     val time by produceState(initialValue = clockNow()) {
         while (true) {
             value = clockNow()
             delay(20_000)
         }
     }
-    Box(
-        Modifier
-            .fillMaxHeight()
-            .width(railWidth)
-            .background(Color.White.copy(alpha = 0.045f))
-            .clipToBounds()
-            .onFocusChanged {
-                railFocused = it.hasFocus
-                onFocusChanged(it.hasFocus)
-            },
-    ) {
-    Column(
-        Modifier
-            .fillMaxHeight()
-            .requiredWidth(targetWidth)
-            .align(Alignment.TopStart)
-            .padding(start = TV_INSET_H + 8.dp, end = 10.dp, top = TV_INSET_V + 6.dp, bottom = TV_INSET_V + 6.dp),
-    ) {
-        // Brand + clock, as Sky puts them: top-left, always.
-        if (expanded) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-            ) {
-                Text(
-                    buildAnnotatedString {
-                        withStyle(SpanStyle(color = ArcBlue, fontWeight = FontWeight.Bold)) { append("Arc") }
-                        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(" TV") }
-                    },
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    time,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Color.White.copy(alpha = 0.85f),
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
-        } else {
-            Text(
-                "A",
-                style = MaterialTheme.typography.titleLarge,
-                color = ArcBlue,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
-        }
-        Spacer(Modifier.height(14.dp))
-
-        // Sky's preview slot: the first favourite channel, one press to play.
-        // (A live video preview would hold the IPTV panel's single allowed
-        // connection hostage, so artwork stands in for the tuner picture.)
-        if (expanded && preview != null) {
-            androidx.tv.material3.Card(
-                onClick = { onPreviewClick(preview) },
-                shape = androidx.tv.material3.CardDefaults.shape(RoundedCornerShape(6.dp)),
-                scale = androidx.tv.material3.CardDefaults.scale(focusedScale = 1.03f),
-                border = androidx.tv.material3.CardDefaults.border(
-                    focusedBorder = Border(BorderStroke(2.dp, Color.White), shape = RoundedCornerShape(6.dp)),
-                ),
-                modifier = Modifier.fillMaxWidth().height(106.dp),
-            ) {
-                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant)) {
-                    if (preview.logo.isNotBlank()) {
-                        coil.compose.AsyncImage(
-                            model = preview.logo,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp).align(Alignment.Center),
-                        )
-                    } else {
-                        Text(
-                            preview.name.trim().firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "•",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = ArcBlue,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.align(Alignment.Center),
-                        )
-                    }
-                    Text(
-                        preview.name,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .fillMaxWidth()
-                            .background(Color.Black.copy(alpha = 0.55f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    )
-                }
-            }
-            Spacer(Modifier.height(18.dp))
-        }
-        tabs.forEachIndexed { index, title ->
-            RailItem(
-                title = title,
-                icon = railIcon(title),
-                selected = index == selected,
-                onActivate = { onSelect(index) },
-                onFocused = { onPreview(index) },
-                subdued = title == "Settings",
-                expanded = expanded,
-            )
-            Spacer(Modifier.height(2.dp))
-        }
-        Spacer(Modifier.weight(1f))
-        RailItem(
-            title = "Search",
-            icon = Icons.Default.Search,
-            selected = false,
-            onActivate = onSearch,
-            expanded = expanded,
-            showIconExpanded = true,
-        )
-    }
-    }
-}
-
-/** The icon each section shows while the rail is closed. */
-private fun railIcon(title: String): ImageVector = when (title) {
-    "Browse" -> Icons.Default.Home
-    "Movies" -> Icons.Default.Movie
-    "TV Shows" -> Icons.Default.Tv
-    "Live" -> Icons.Default.LiveTv
-    "Guide" -> Icons.Default.ListAlt
-    "Downloads" -> Icons.Default.Download
-    "Torrents" -> Icons.Default.CloudDownload
-    "Settings" -> Icons.Default.Settings
-    else -> Icons.Default.Search
-}
-
-/**
- * One rail entry. Sky Q's highlight is a translucent light box on the blue
- * ground: the section you're in keeps it; focus brightens it and adds a
- * fine keyline. [onFocused] reports that focus has arrived -- the caller
- * decides when that becomes a section change -- while OK activates at once.
- */
-@Composable
-private fun RailItem(
-    title: String,
-    icon: ImageVector,
-    selected: Boolean,
-    onActivate: () -> Unit,
-    onFocused: (() -> Unit)? = null,
-    subdued: Boolean = false,
-    expanded: Boolean = true,
-    showIconExpanded: Boolean = false,
-) {
-    val shape = RoundedCornerShape(6.dp)
-    Surface(
-        onClick = onActivate,
-        shape = ClickableSurfaceDefaults.shape(shape),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) Color.White.copy(alpha = 0.20f) else Color.Transparent,
-            focusedContainerColor = Color.White.copy(alpha = if (selected) 0.32f else 0.22f),
-            contentColor = when {
-                selected -> Color.White
-                subdued -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                else -> Color.White.copy(alpha = 0.86f)
-            },
-            focusedContentColor = Color.White,
-        ),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = Border(BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)), shape = shape),
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { if (it.isFocused) onFocused?.invoke() },
+            .height(NAV_HEIGHT)
+            // Legible over Home's artwork, invisible on the plain screens.
+            .background(Brush.verticalGradient(listOf(ArcBackground.copy(alpha = 0.92f), ArcBackground.copy(alpha = 0f))))
+            .padding(horizontal = TV_INSET_H)
+            .onFocusChanged { onFocusChanged(it.hasFocus) }
+            .focusGroup(),
     ) {
-        if (expanded) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            ) {
-                if (showIconExpanded) {
-                    Icon(icon, contentDescription = null, Modifier.size(17.dp))
-                    Spacer(Modifier.width(10.dp))
-                }
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
-        } else {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-            ) {
-                Icon(icon, contentDescription = title, Modifier.size(21.dp))
-            }
+        // The web app's wordmark: "Arc" with the blue "TV" tag.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Arc", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+            Spacer(Modifier.width(5.dp))
+            Text(
+                "TV",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier
+                    .background(ArcBlue, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 5.dp, vertical = 1.dp),
+            )
+        }
+        Spacer(Modifier.width(22.dp))
+        NavIcon(
+            Icons.Default.Search,
+            "Search",
+            selected = false,
+            onClick = onSearch,
+            modifier = Modifier.onFocusChanged { if (it.isFocused) onFocused("Search") },
+        )
+        Spacer(Modifier.width(6.dp))
+        sections.filter { it != Section.SETTINGS }.forEach { name ->
+            NavLabel(
+                label = name,
+                selected = name == selected,
+                onClick = { onActivate(name) },
+                modifier = Modifier
+                    .focusRequester(requesterFor(name))
+                    .onFocusChanged { if (it.isFocused) onFocused(name) },
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        Text(
+            time,
+            style = MaterialTheme.typography.titleSmall,
+            color = Color.White.copy(alpha = 0.85f),
+            maxLines = 1,
+            softWrap = false,
+        )
+        Spacer(Modifier.width(12.dp))
+        NavIcon(
+            Icons.Default.Settings,
+            Section.SETTINGS,
+            selected = selected == Section.SETTINGS,
+            onClick = { onActivate(Section.SETTINGS) },
+            modifier = Modifier
+                .focusRequester(requesterFor(Section.SETTINGS))
+                .onFocusChanged { if (it.isFocused) onFocused(Section.SETTINGS) },
+        )
+    }
+}
+
+@Composable
+private fun NavLabel(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(50)
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(shape),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.White,
+            pressedContainerColor = Color.White.copy(alpha = 0.85f),
+            contentColor = if (selected) Color.White else Color.White.copy(alpha = 0.62f),
+            focusedContentColor = Color.Black,
+            pressedContentColor = Color.Black,
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
+        modifier = modifier,
+    ) {
+        // Snug: with Downloads and Torrents (Real-Debrid) the menu has
+        // nine labels to fit across a 960dp-wide TV.
+        Text(
+            label,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun NavIcon(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) Color.White.copy(alpha = 0.15f) else Color.Transparent,
+            focusedContainerColor = Color.White,
+            pressedContainerColor = Color.White.copy(alpha = 0.85f),
+            contentColor = if (selected) Color.White else Color.White.copy(alpha = 0.75f),
+            focusedContentColor = Color.Black,
+            pressedContentColor = Color.Black,
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
+        modifier = modifier,
+    ) {
+        Box(Modifier.padding(7.dp)) {
+            Icon(icon, contentDescription = label, modifier = Modifier.size(20.dp))
         }
     }
 }
 
-/** Sky's clock: "7.11pm". */
+/** "7.11pm", as Sky and the UK write it. */
 private fun clockNow(): String =
     SimpleDateFormat("h.mma", Locale.UK).format(Date()).lowercase(Locale.UK)

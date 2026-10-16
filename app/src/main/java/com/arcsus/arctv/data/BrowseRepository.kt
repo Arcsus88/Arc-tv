@@ -30,6 +30,36 @@ data class CatalogItem(
     val isTv: Boolean get() = type == "tv"
 }
 
+/**
+ * A title in one of the pre-built collections (Disney, Netflix). Disney's
+ * films carry their pre-searched best source; Netflix's titles leave these
+ * out and search live, as Movies and TV Shows do.
+ */
+@Serializable
+data class CollectionTitle(
+    val id: Int = 0,
+    val type: String = "movie",
+    val title: String = "",
+    val year: String = "",
+    val poster: String = "",
+    val backdrop: String = "",
+    val overview: String = "",
+    /** Seeders on the best stored source; 0 once scanned means nothing is seeded. */
+    val seeds: Int? = null,
+    /** Whether sources have been searched yet (unscanned titles search live). */
+    val scanned: Boolean? = null,
+    /** Release name of the best stored source, "" when there is none. */
+    val best: String? = null,
+) {
+    val item: CatalogItem get() = CatalogItem(id, type, title, year, poster, backdrop, overview)
+
+    /** Scanned and nothing seeded: shown greyed out. */
+    val noSeeds: Boolean get() = scanned == true && seeds == 0
+
+    /** Pre-searched with a seeded source, so Play can skip the live search. */
+    val ready: Boolean get() = scanned == true && (seeds ?: 0) > 0
+}
+
 @Serializable
 data class CatalogRow(val title: String = "", val items: List<CatalogItem> = emptyList())
 
@@ -85,6 +115,12 @@ data class TitleDetails(
 }
 
 @Serializable
+private data class CollectionResponse(val titles: List<CollectionTitle> = emptyList(), val error: String? = null)
+
+@Serializable
+private data class StoredSourcesResponse(val sources: List<Source>? = null, val error: String? = null)
+
+@Serializable
 private data class HomeResponse(val rows: List<CatalogRow> = emptyList(), val error: String? = null)
 
 @Serializable
@@ -131,6 +167,12 @@ class BrowseRepository(
     companion object {
         private const val FUNCTION_URL =
             "https://rrzhigacwzkfyhzysirt.supabase.co/functions/v1/arc-browse"
+        /** The Disney catalogue with pre-searched sources (same project as arc-browse). */
+        private const val DISNEY_FUNCTION_URL =
+            "https://rrzhigacwzkfyhzysirt.supabase.co/functions/v1/arc-disney"
+        /** The films and series on Netflix UK. */
+        private const val NETFLIX_FUNCTION_URL =
+            "https://rrzhigacwzkfyhzysirt.supabase.co/functions/v1/arc-netflix"
         private const val SUPABASE_KEY = "sb_publishable_ayHyFxZX7DyInLz3qvZnng_0EUT_EFw"
     }
 
@@ -145,6 +187,29 @@ class BrowseRepository(
         val p = json.decodeFromString<HomeResponse>(post(buildJsonObject { put("action", "home") }, t))
         p.error?.let { throw BrowseException(it) }
         p.rows
+    }
+
+    /**
+     * A collection's whole catalogue ("disney" or "netflix"), in the
+     * backend's popularity order. Small enough to load at once, so its page
+     * searches and sorts on the device, as the web app's does.
+     */
+    suspend fun collection(name: String): List<CollectionTitle> = call { t ->
+        val url = if (name == "disney") DISNEY_FUNCTION_URL else NETFLIX_FUNCTION_URL
+        val p = json.decodeFromString<CollectionResponse>(post(buildJsonObject { put("action", "list") }, t, url))
+        p.error?.let { throw BrowseException(it) }
+        p.titles
+    }
+
+    /**
+     * The sources stored for a Disney film when its catalogue was scanned,
+     * best first. Null means "search live" (not scanned, or unreachable).
+     */
+    suspend fun storedSources(id: Int): List<Source>? = call { t ->
+        val body = buildJsonObject { put("action", "sources"); put("id", id) }
+        val p = json.decodeFromString<StoredSourcesResponse>(post(body, t, DISNEY_FUNCTION_URL))
+        p.error?.let { throw BrowseException(it) }
+        p.sources
     }
 
     suspend fun search(query: String): List<CatalogItem> = call { t ->
@@ -290,9 +355,9 @@ class BrowseRepository(
         return withContext(Dispatchers.IO) { block(tokens) }
     }
 
-    private fun requestFor(body: JsonObject, tokens: DebridTokens): Request {
+    private fun requestFor(body: JsonObject, tokens: DebridTokens, url: String = FUNCTION_URL): Request {
         val builder = Request.Builder()
-            .url(FUNCTION_URL)
+            .url(url)
             .header("apikey", SUPABASE_KEY)
             .header("Authorization", "Bearer $SUPABASE_KEY")
             .post(body.toString().toRequestBody(jsonMedia))
@@ -302,8 +367,8 @@ class BrowseRepository(
         return builder.build()
     }
 
-    private fun post(body: JsonObject, tokens: DebridTokens): String {
-        client.newCall(requestFor(body, tokens)).execute().use { response ->
+    private fun post(body: JsonObject, tokens: DebridTokens, url: String = FUNCTION_URL): String {
+        client.newCall(requestFor(body, tokens, url)).execute().use { response ->
             val text = response.body?.string().orEmpty()
             if (response.code == 401) throw BrowseException("Debrid sign-in rejected. Sign in again.")
             if (!response.isSuccessful && text.isBlank()) {

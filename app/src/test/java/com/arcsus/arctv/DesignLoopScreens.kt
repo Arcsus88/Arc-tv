@@ -109,17 +109,7 @@ class DesignLoopScreens {
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .background(
-                            androidx.compose.ui.graphics.Brush.linearGradient(
-                                colors = listOf(
-                                    androidx.compose.ui.graphics.Color(0xFF17284A),
-                                    androidx.compose.ui.graphics.Color(0xFF0F1A30),
-                                    com.arcsus.arctv.ui.theme.ArcBackground,
-                                ),
-                                start = androidx.compose.ui.geometry.Offset.Zero,
-                                end = androidx.compose.ui.geometry.Offset.Infinite,
-                            ),
-                        )
+                        .background(com.arcsus.arctv.ui.theme.ArcBackground)
                 ) { content() }
             }
         }
@@ -158,27 +148,33 @@ class DesignLoopScreens {
         settle(120)
     }
 
+    /** Menu items are labels, or icons (Search, Settings) named by their description. */
     private fun isFocused(text: String): Boolean =
-        rule.onAllNodes(hasText(text) and androidx.compose.ui.test.isFocused()).fetchSemanticsNodes().isNotEmpty()
+        rule.onAllNodes(
+            androidx.compose.ui.test.isFocused() and
+                (hasText(text) or androidx.compose.ui.test.hasContentDescription(text)),
+        ).fetchSemanticsNodes().isNotEmpty()
 
     /**
-     * Open a rail section the way a viewer does: LEFT out of the content,
-     * UP to the top of the rail, DOWN until the item has focus, then OK.
-     * Focus placed on the rail any other way is treated as the platform's
+     * Open a menu section the way a viewer does: UP out of the content, LEFT
+     * to the start of the menu, RIGHT until the item has focus, then OK.
+     * Focus placed on the menu any other way is treated as the platform's
      * doing and sent back into the content, so a plain requestFocus won't do.
      */
-    private val railTitles = listOf("Browse", "Movies", "TV Shows", "Live", "Guide", "Downloads", "Torrents", "Settings", "Search")
+    private val menuTitles = listOf(
+        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Live TV", "Guide", "Downloads", "Torrents", "Settings",
+    )
 
-    private fun onRail(): Boolean = railTitles.any { isFocused(it) }
+    private fun onMenu(): Boolean = menuTitles.any { isFocused(it) }
 
     private fun focus(text: String): Boolean {
-        // LEFT until the rail has focus: from the middle of a row, each
-        // press only steps one tile.
-        repeat(12) { if (!onRail()) key(androidx.compose.ui.input.key.Key.DirectionLeft) }
-        repeat(8) { if (!isFocused(text)) key(androidx.compose.ui.input.key.Key.DirectionUp) }
-        repeat(10) { if (!isFocused(text)) key(androidx.compose.ui.input.key.Key.DirectionDown) }
+        // UP until the menu has focus: from deep in a page, each press only
+        // steps one row.
+        repeat(12) { if (!onMenu()) key(androidx.compose.ui.input.key.Key.DirectionUp) }
+        repeat(12) { if (!isFocused("Search")) key(androidx.compose.ui.input.key.Key.DirectionLeft) }
+        repeat(14) { if (!isFocused(text)) key(androidx.compose.ui.input.key.Key.DirectionRight) }
         val reached = isFocused(text)
-        println("design-loop: rail '$text' reached=$reached")
+        println("design-loop: menu '$text' reached=$reached")
         if (!reached) return false
         key(androidx.compose.ui.input.key.Key.DirectionCenter)
         settle(1_200)
@@ -200,9 +196,9 @@ class DesignLoopScreens {
         println("design-loop: home loaded=$loaded")
         settle(6_000) // artwork
         snap("01-home")
-        // Rail expanded (focus on the rail), then Movies opened.
-        focus("TV Shows")
-        snap("02-home-rail")
+        // Focus on the menu, then Movies opened.
+        focus("Shows")
+        snap("02-home-menu")
         focus("Movies")
         waitForText("Popular", 30_000)
         settle(6_000)
@@ -216,7 +212,7 @@ class DesignLoopScreens {
                 snap("04-movies-focused")
             }
         }
-        focus("Live")
+        focus("Live TV")
         waitForText("channels", 60_000)
         settle(3_000)
         snap("05-live")

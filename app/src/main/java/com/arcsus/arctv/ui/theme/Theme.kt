@@ -5,22 +5,39 @@ import androidx.compose.ui.graphics.Color
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 
-val ArcBlue = Color(0xFF569CFF)
-val ArcBackground = Color(0xFF0B0F15)
-val ArcSurface = Color(0xFF161D26)
+// The web app's palette (globals.css), so both clients look like one
+// product: a near-black ground, slightly lifted panels, hairline borders,
+// cool grey secondary text and the Arc blue accent.
+val ArcBackground = Color(0xFF0A0A0C)
+val ArcSurface = Color(0xFF14161B)
+val ArcSurfaceRaised = Color(0xFF1C1F26)
+val ArcBorder = Color(0xFF23262E)
+val ArcForeground = Color(0xFFF5F6F8)
+val ArcMuted = Color(0xFF9AA3B2)
+val ArcBlue = Color(0xFF3D7BFF)
+val ArcDestructive = Color(0xFFF87171)
 
 @Composable
 fun ArcTvTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = ArcBlue,
+            onPrimary = Color.White,
             background = ArcBackground,
+            onBackground = ArcForeground,
             surface = ArcSurface,
-            surfaceVariant = Color(0xFF212B37),
-            onPrimary = Color(0xFF06101F),
-            onBackground = Color(0xFFEAF0F6),
-            onSurface = Color(0xFFEAF0F6),
-            onSurfaceVariant = Color(0xFFAFBAC7),
+            onSurface = ArcForeground,
+            surfaceVariant = ArcSurfaceRaised,
+            onSurfaceVariant = ArcMuted,
+            // TV Material draws focus outlines in `border`: Netflix's white
+            // keyline. The web's hairline grey is `borderVariant`.
+            border = Color.White,
+            borderVariant = ArcBorder,
+            error = ArcDestructive,
+            // TV Material paints focused buttons and cards in the inverse
+            // pair: Netflix's white fill with black text.
+            inverseSurface = Color.White,
+            inverseOnSurface = Color.Black,
         ),
         typography = ArcTypography,
         content = content,

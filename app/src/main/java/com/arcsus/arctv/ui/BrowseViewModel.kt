@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.arcsus.arctv.data.BrowseRepository
 import com.arcsus.arctv.data.CatalogItem
 import com.arcsus.arctv.data.CatalogRow
+import com.arcsus.arctv.data.CollectionTitle
 import com.arcsus.arctv.data.Episode
 import com.arcsus.arctv.data.Genre
 import com.arcsus.arctv.data.Genres
@@ -22,7 +23,26 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class BrowseTab { HOME, MOVIES, TV }
+enum class BrowseTab { HOME, MOVIES, TV, DISNEY, NETFLIX }
+
+/** The pre-built catalogues, each with its own section and home banner (as on the web). */
+enum class CatalogCollection(val key: String, val label: String, val noun: String, val hasSeries: Boolean) {
+    DISNEY("disney", "Disney", "films", hasSeries = false),
+    NETFLIX("netflix", "Netflix", "films & series", hasSeries = true),
+}
+
+/** A collection page's own sort, applied on the device to the loaded catalogue. */
+enum class CollectionSort(val label: String) { POPULAR("Popular"), NEWEST("Newest"), OLDEST("Oldest"), AZ("A–Z") }
+
+/** Films, series or both, for a collection that has series (Netflix). */
+enum class CollectionKind(val label: String, val type: String?) { ALL("All", null), FILMS("Films", "movie"), SERIES("Series", "tv") }
+
+val BrowseTab.collection: CatalogCollection?
+    get() = when (this) {
+        BrowseTab.DISNEY -> CatalogCollection.DISNEY
+        BrowseTab.NETFLIX -> CatalogCollection.NETFLIX
+        else -> null
+    }
 
 /** Tiles per titled-art request; the server fans each out to TMDB in parallel. */
 private const val TILE_ART_BATCH = 20
@@ -56,6 +76,8 @@ class BrowseViewModel(
             val note: String? = null,
             val next: NextEp? = null, // what plays next (may roll into next season)
             val loadingMore: Boolean = false, // still streaming in more sources
+            /** Disney's pre-searched sources rather than a live search. */
+            val stored: Boolean = false,
         ) : Sheet
         data class Error(val message: String) : Sheet
     }
@@ -80,6 +102,13 @@ class BrowseViewModel(
         val favorites: List<CatalogItem> = emptyList(),
         /** What was played most recently, for the Continue Watching row. */
         val continueWatching: List<WatchEntry> = emptyList(),
+        /** Disney and Netflix catalogues, keyed by CatalogCollection.key; absent until loaded. */
+        val collections: Map<String, List<CollectionTitle>> = emptyMap(),
+        val collectionErrors: Map<String, String> = emptyMap(),
+        /** Each collection keeps its own sort; search and kind reset on leaving. */
+        val collectionSorts: Map<String, CollectionSort> = emptyMap(),
+        val collectionQuery: String = "",
+        val collectionKind: CollectionKind = CollectionKind.ALL,
     ) {
         fun isFavorite(item: CatalogItem): Boolean =
             favorites.any { it.id == item.id && it.type == item.type }
@@ -131,7 +160,11 @@ class BrowseViewModel(
         }
     }
 
-    /** Fetch the wide backdrop for a hero item once (shares the details cache). */
+    /** Full details for billboard titles (rating, runtime, genres), keyed "type:id". */
+    private val _heroDetails = MutableStateFlow<Map<String, TitleDetails>>(emptyMap())
+    val heroDetails: StateFlow<Map<String, TitleDetails>> = _heroDetails
+
+    /** Fetch the wide backdrop and details for a hero item once (shares the details cache). */
     fun loadHeroArt(item: CatalogItem) {
         val key = "${item.type}:${item.id}"
         if (_heroArt.value.containsKey(key)) return
@@ -139,6 +172,7 @@ class BrowseViewModel(
         viewModelScope.launch {
             val d = detailsCache[key] ?: runCatching { repository.details(item) }.getOrNull()
                 ?.also { detailsCache[key] = it }
+            if (d != null) _heroDetails.update { it + (key to d) }
             val backdrop = d?.backdrop.orEmpty()
             if (backdrop.isNotBlank()) _heroArt.value = _heroArt.value + (key to backdrop)
         }
@@ -159,6 +193,7 @@ class BrowseViewModel(
     init {
         loadHome()
         loadGenres()
+        CatalogCollection.entries.forEach { loadCollection(it) }
         viewModelScope.launch {
             settingsStore.favorites.collect { favs ->
                 _state.update { it.copy(favorites = favs) }
@@ -223,9 +258,58 @@ class BrowseViewModel(
     fun setTab(tab: BrowseTab) {
         if (tab == _state.value.tab) return
         discoverJob?.cancel()
-        _state.update { it.copy(tab = tab, genreId = null, discoverLoading = false) }
-        if (tab != BrowseTab.HOME) reloadDiscover()
+        _state.update {
+            it.copy(
+                tab = tab,
+                genreId = null,
+                discoverLoading = false,
+                collectionQuery = "",
+                collectionKind = CollectionKind.ALL,
+            )
+        }
+        if (tab == BrowseTab.MOVIES || tab == BrowseTab.TV) reloadDiscover()
+        tab.collection?.let { c ->
+            if (_state.value.collections[c.key] == null) loadCollection(c)
+        }
     }
+
+    // ---- Disney / Netflix ----
+
+    /**
+     * A collection's whole catalogue. The home page shows its banner once it
+     * has loaded, and simply leaves the banner out if it can't (as the web
+     * app does).
+     */
+    fun loadCollection(collection: CatalogCollection) {
+        viewModelScope.launch {
+            _state.update { it.copy(collectionErrors = it.collectionErrors - collection.key) }
+            try {
+                val titles = repository.collection(collection.key).distinctBy { it.type + it.id }
+                _state.update { it.copy(collections = it.collections + (collection.key to titles)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        collectionErrors = it.collectionErrors +
+                            (collection.key to (e.message ?: "Couldn't load ${collection.label}.")),
+                    )
+                }
+            }
+        }
+    }
+
+    fun setCollectionSort(collection: CatalogCollection, sort: CollectionSort) =
+        _state.update { it.copy(collectionSorts = it.collectionSorts + (collection.key to sort)) }
+
+    fun setCollectionQuery(query: String) = _state.update { it.copy(collectionQuery = query) }
+
+    fun setCollectionKind(kind: CollectionKind) = _state.update { it.copy(collectionKind = kind) }
+
+    /** The Disney film's catalogue entry when it was pre-searched and has a seeded source. */
+    private fun readyDisneyFilm(item: CatalogItem): CollectionTitle? =
+        if (item.isTv) null
+        else _state.value.collections[CatalogCollection.DISNEY.key]?.firstOrNull { it.id == item.id && it.ready }
 
     fun setGenre(genreId: Int?) {
         if (genreId == _state.value.genreId) return
@@ -258,7 +342,7 @@ class BrowseViewModel(
 
     fun loadMoreDiscover() {
         val s = _state.value
-        if (s.tab == BrowseTab.HOME || s.discoverLoading || s.discoverPage >= s.discoverTotalPages) return
+        if ((s.tab != BrowseTab.MOVIES && s.tab != BrowseTab.TV) || s.discoverLoading || s.discoverPage >= s.discoverTotalPages) return
         val type = if (s.tab == BrowseTab.TV) "tv" else "movie"
         val nextPage = s.discoverPage + 1
         // What this page is for. A reply that lands after the user has moved on
@@ -399,8 +483,12 @@ class BrowseViewModel(
     // the sheet after the user has navigated elsewhere.
     private var sourcesEpoch = 0
 
-    private fun loadSources(item: CatalogItem, season: Int?, episode: Int?) {
+    private fun loadSources(item: CatalogItem, season: Int?, episode: Int?, live: Boolean = false) {
         val key = "${item.id}:${season ?: ""}:${episode ?: ""}"
+        if (!live && readyDisneyFilm(item) != null) {
+            playStored(item)
+            return
+        }
         sourcesCache[key]?.let {
             _sheet.value = Sheet.Sources(item, season, episode, it)
             prepareNext(item, season, episode)
@@ -435,6 +523,37 @@ class BrowseViewModel(
                 prepareNext(item, season, episode)
             }
         }
+    }
+
+    private val storedCache = mutableMapOf<Int, List<Source>>()
+
+    /**
+     * A pre-searched Disney film: its stored sources come back at once, and
+     * the best is played straight away -- the web app's "Play skips the
+     * source list". The list stays up behind the player, with "Search live"
+     * for when none of them will play.
+     */
+    private fun playStored(item: CatalogItem) {
+        val epoch = ++sourcesEpoch
+        _sheet.value = Sheet.Loading("Finding the best source…")
+        viewModelScope.launch {
+            val stored = storedCache[item.id] ?: runCatching { repository.storedSources(item.id) }.getOrNull()
+                ?.distinctBy { it.magnet }
+                ?.also { if (it.isNotEmpty()) storedCache[item.id] = it }
+            if (epoch != sourcesEpoch) return@launch
+            if (stored.isNullOrEmpty()) {
+                loadSources(item, null, null, live = true)
+                return@launch
+            }
+            _sheet.value = Sheet.Sources(item, null, null, stored, stored = true)
+            playSource(stored.first())
+        }
+    }
+
+    /** "Search live": leave the stored list for the normal source search. */
+    fun searchLive() {
+        val s = _sheet.value as? Sheet.Sources ?: return
+        loadSources(s.item, s.season, s.episode, live = true)
     }
 
     /**

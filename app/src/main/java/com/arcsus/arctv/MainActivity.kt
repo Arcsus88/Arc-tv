@@ -51,26 +51,12 @@ class MainActivity : ComponentActivity() {
                         app.settingsStore.liveSetupNeeded.collect { value = it }
                     }
                     val scope = rememberCoroutineScope()
-                    // The rail runs to the screen edge like Sky's; the safe
-                    // margin (TV_INSET in HomeScreen) is applied to contents,
-                    // not to the panels themselves.
+                    // The web app's flat near-black ground; Home's artwork
+                    // supplies the colour.
                     Box(
                         Modifier
                             .fillMaxSize()
-                            // Sky Q sits on a blue gradient rather than flat
-                            // black; Arc's version runs deep blue at the top
-                            // left down to the navy ground.
-                            .background(
-                                androidx.compose.ui.graphics.Brush.linearGradient(
-                                    colors = listOf(
-                                        androidx.compose.ui.graphics.Color(0xFF17284A),
-                                        androidx.compose.ui.graphics.Color(0xFF0F1A30),
-                                        com.arcsus.arctv.ui.theme.ArcBackground,
-                                    ),
-                                    start = androidx.compose.ui.geometry.Offset.Zero,
-                                    end = androidx.compose.ui.geometry.Offset.Infinite,
-                                ),
-                            )
+                            .background(com.arcsus.arctv.ui.theme.ArcBackground)
                     ) {
                         when {
                             authorized == null || liveSetupNeeded == null -> Unit // still reading DataStore

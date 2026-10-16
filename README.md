@@ -7,6 +7,23 @@ Just Player, …).
 
 ## Features
 
+- **Netflix-style TV interface** — the menu runs across the top (Netflix's
+  2025 TV layout), Home opens on a billboard with Play / More info / My List,
+  and a details area at the top describes whatever has focus while the rows
+  scroll beneath it, the focused row and tile always in the same place. A
+  Top 10 row with outlined rank numerals, Continue Watching and My List
+  (hearted titles). Back takes you up to the menu, and from there Home.
+  Styled with the web app's dark theme: near-black ground,
+  hairline borders, the Arc blue accent, Netflix's white focus.
+- **Disney, Sky Sports and Netflix banners** — the web app's home banners:
+  LEFT/RIGHT slides between them, OK opens Disney (every Disney and Pixar
+  feature, pre-searched so Play starts at once), the guide on the UK sports
+  channels, or Netflix (the films and series on Netflix UK). Both collections
+  have their own section with search, sort and (Netflix) All / Films / Series.
+- **TV guide** — as on the web: pick your channel groups, then each channel
+  shows its logo over its Sky channel number, a still of what's on with a
+  progress bar, and now and next. Listings, numbers, logos and stills come
+  from Sky's own EPG where Sky carries the channel, else the Xtream panel's.
 - **Code-based sign-in** — no typing credentials with the remote. Pick
   Real-Debrid or AllDebrid; the app shows a short code you authorise at
   `real-debrid.com/device` or `alldebrid.com/pin` from your phone or computer.
@@ -26,6 +43,17 @@ Just Player, …).
   file, unrestrict it, and play.
 - **Self-updating** — checks GitHub Releases on launch and offers to download
   and install new versions.
+
+## Design captures
+
+`RedesignScreens` renders the main screens on the JVM with real artwork and
+today's Sky listings (no debrid account needed) and writes PNGs to
+`.design-loop/redesign/`:
+
+```sh
+ARC_REDESIGN_SHOTS=1 ./gradlew testDebugUnitTest -Proborazzi.test.record=true \
+  --tests 'com.arcsus.arctv.RedesignScreens'
+```
 
 ## Building
 

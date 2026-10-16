@@ -3,6 +3,7 @@ package com.arcsus.arctv
 import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -41,8 +42,8 @@ import kotlin.concurrent.thread
  * Regression: opening a group on the Live tab (Favourites included) used to
  * bounce the viewer to Home. The pressed card is removed with its grid, so
  * Compose clears focus; on a TV -- no touch mode -- the platform then hands
- * focus to the first focusable view on screen, the rail's top item, and the
- * rail's open-on-rest opened Browse.
+ * focus to the first focusable view on screen, the menu's first item, and
+ * the menu's open-on-rest opened Home.
  *
  * Runs offline: the playlist is a local M3U served from this process.
  */
@@ -131,11 +132,7 @@ class LiveFocusTest {
         return false
     }
 
-    /**
-     * Focus a node and press OK on the remote (tv-material3 ignores touch).
-     * The node is looked up again before the key press: a rail item is an
-     * icon while the rail is closed and text once focus opens it.
-     */
+    /** Focus a node and press OK on the remote (tv-material3 ignores touch). */
     private fun press(find: () -> SemanticsNodeInteraction) {
         find().requestFocus()
         settle(200)
@@ -148,28 +145,34 @@ class LiveFocusTest {
         settle(120)
     }
 
+    /** Menu items are labels, or icons (Search, Settings) named by their description. */
     private fun isFocused(text: String): Boolean =
-        rule.onAllNodes(hasText(text) and isFocused()).fetchSemanticsNodes().isNotEmpty()
+        rule.onAllNodes(isFocused() and (hasText(text) or hasContentDescription(text)))
+            .fetchSemanticsNodes().isNotEmpty()
 
     /**
-     * Walk to a rail item with the remote, as a viewer would: LEFT out of the
-     * content, UP to the top, DOWN until the item has focus. (Focus put on
-     * the rail any other way is, by design, treated as the platform's doing
-     * and sent back into the content.)
+     * Walk to a menu item with the remote, as a viewer would: UP out of the
+     * content, LEFT to the start of the menu, RIGHT until the item has focus.
+     * (Focus put on the menu any other way is, by design, treated as the
+     * platform's doing and sent back into the content.)
      */
-    private val railTitles = listOf("Browse", "Movies", "TV Shows", "Live", "Guide", "Settings", "Search")
+    private val menuTitles = listOf("Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Live TV", "Guide", "Settings")
 
-    private fun railTo(title: String) {
-        repeat(12) { if (railTitles.none { isFocused(it) }) key(Key.DirectionLeft) }
-        repeat(8) { if (!isFocused(title)) key(Key.DirectionUp) }
-        repeat(10) { if (!isFocused(title)) key(Key.DirectionDown) }
-        assertTrue("could not reach '$title' on the rail", isFocused(title))
+    private fun menuTo(title: String) {
+        repeat(12) { if (menuTitles.none { isFocused(it) }) key(Key.DirectionUp) }
+        repeat(12) { if (!isFocused("Search")) key(Key.DirectionLeft) }
+        repeat(12) { if (!isFocused(title)) key(Key.DirectionRight) }
+        assertTrue("could not reach '$title' on the menu", isFocused(title))
     }
 
     private fun openSection(title: String) {
-        railTo(title)
+        menuTo(title)
         key(Key.DirectionCenter)
     }
+
+    /** The Live screen's own "Live TV" heading, besides the menu's label. */
+    private fun onLiveScreen(): Boolean =
+        rule.onAllNodes(hasText("Live TV")).fetchSemanticsNodes().size >= 2
 
     /**
      * What a TV does the instant the focused view disappears: View.clearFocus
@@ -185,27 +188,26 @@ class LiveFocusTest {
     fun openingFavouritesStaysOnLive() {
         rule.setContent { ArcTvTheme { HomeScreen(factory) } }
         settle(300)
-        // The closed rail shows icons; their content descriptions carry the title.
-        openSection("Live")
+        openSection("Live TV")
         val loaded = waitFor("Favourites", 20_000)
         if (!loaded) println("live-focus: tree=\n" + rule.onRoot().printToString())
         assertTrue("Live tab did not load the playlist", loaded)
 
         press { rule.onNodeWithText("Favourites", substring = true) }
         platformRefocus()
-        settle(900) // past the rail's open-on-rest
+        settle(900) // past the menu's open-on-rest
 
         assertTrue("Favourites group did not open", hasNode("Groups"))
-        assertTrue("left the Live tab", hasNode("Live TV"))
+        assertTrue("left the Live tab", onLiveScreen())
         assertFalse("Home opened", hasNode("Trending"))
     }
 
-    /** The deliberate path must keep working: resting on a rail item opens it. */
+    /** The deliberate path must keep working: resting on a menu item opens it. */
     @Test
-    fun restingOnRailItemOpensIt() {
+    fun restingOnMenuItemOpensIt() {
         rule.setContent { ArcTvTheme { HomeScreen(factory) } }
         settle(300)
-        railTo("Settings")
+        menuTo("Settings")
         settle(700) // past the open-on-rest delay
         assertTrue("Settings did not open on rest", hasNode("Check for updates"))
     }
@@ -214,7 +216,7 @@ class LiveFocusTest {
     fun backToGroupsStaysOnLive() {
         rule.setContent { ArcTvTheme { HomeScreen(factory) } }
         settle(300)
-        openSection("Live")
+        openSection("Live TV")
         assertTrue("Live tab did not load the playlist", waitFor("UK", 20_000))
 
         press { rule.onNode(hasText("UK", substring = true) and hasClickAction()) }
