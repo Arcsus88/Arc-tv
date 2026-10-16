@@ -220,7 +220,7 @@ internal fun NetflixHome(
                     if (banners.isNotEmpty()) {
                         item(key = "__banners") {
                             HomeRow(title = null) {
-                                HomeBannerCarousel(
+                                HomeBannerRow(
                                     banners = banners,
                                     onShowing = { spotlight = Spotlight.Banner(it) },
                                     modifier = Modifier
