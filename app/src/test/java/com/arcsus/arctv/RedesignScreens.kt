@@ -236,7 +236,7 @@ class RedesignScreens {
         settle(1_500)
     }
 
-    private val menu = listOf("Home", "Shows", "Movies", "Disney", "Netflix", "Prime Video", "Live TV", "Guide")
+    private val menu = listOf("Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Live TV", "Guide")
     private fun focusOnMenu() = menu.any { focused(it) }
 
     @Suppress("UNCHECKED_CAST")
@@ -324,7 +324,7 @@ class RedesignScreens {
         settle(5_000)
         snap("08-netflix")
 
-        openSection("Prime Video")
+        openSection("Prime")
         settle(5_000)
         snap("08b-prime")
 

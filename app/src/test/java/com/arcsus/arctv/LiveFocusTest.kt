@@ -157,7 +157,7 @@ class LiveFocusTest {
      * platform's doing and sent back into the content.)
      */
     private val menuTitles = listOf(
-        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime Video", "Live TV", "Guide", "Settings",
+        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Live TV", "Guide", "Settings",
     )
 
     private fun menuTo(title: String) {

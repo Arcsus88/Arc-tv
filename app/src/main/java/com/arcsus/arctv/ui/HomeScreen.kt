@@ -124,7 +124,8 @@ internal object Section {
     const val MOVIES = "Movies"
     const val DISNEY = "Disney"
     const val NETFLIX = "Netflix"
-    const val PRIME = "Prime Video"
+    // "Prime", not "Prime Video": the menu has no room to spare (see NavLabel).
+    const val PRIME = "Prime"
     const val LIVE = "Live TV"
     const val GUIDE = "Guide"
     const val DOWNLOADS = "Downloads"
@@ -433,15 +434,16 @@ private fun NavLabel(label: String, selected: Boolean, onClick: () -> Unit, modi
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
         modifier = modifier,
     ) {
-        // Snug: with Downloads and Torrents (Real-Debrid) the menu has
-        // nine labels to fit across a 960dp-wide TV.
+        // Snug: with Downloads and Torrents (Real-Debrid) the menu has ten
+        // labels to fit across a 960dp-wide TV and still leave the clock and
+        // settings their room.
         Text(
             label,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             maxLines = 1,
             softWrap = false,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
         )
     }
 }
