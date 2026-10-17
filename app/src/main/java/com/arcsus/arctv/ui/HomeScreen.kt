@@ -124,6 +124,7 @@ internal object Section {
     const val MOVIES = "Movies"
     const val DISNEY = "Disney"
     const val NETFLIX = "Netflix"
+    const val PRIME = "Prime Video"
     const val LIVE = "Live TV"
     const val GUIDE = "Guide"
     const val DOWNLOADS = "Downloads"
@@ -151,7 +152,12 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
     // only appear when Real-Debrid is connected. Settings sits at the far
     // end as a gear, like the web app's header.
     val sections = buildList {
-        addAll(listOf(Section.HOME, Section.SHOWS, Section.MOVIES, Section.DISNEY, Section.NETFLIX, Section.LIVE, Section.GUIDE))
+        addAll(
+            listOf(
+                Section.HOME, Section.SHOWS, Section.MOVIES, Section.DISNEY, Section.NETFLIX, Section.PRIME,
+                Section.LIVE, Section.GUIDE,
+            ),
+        )
         if (settingsState.rdConnected) addAll(listOf(Section.DOWNLOADS, Section.TORRENTS))
         add(Section.SETTINGS)
     }
@@ -172,6 +178,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
             Section.SHOWS -> browseViewModel.setTab(BrowseTab.TV)
             Section.DISNEY -> browseViewModel.setTab(BrowseTab.DISNEY)
             Section.NETFLIX -> browseViewModel.setTab(BrowseTab.NETFLIX)
+            Section.PRIME -> browseViewModel.setTab(BrowseTab.PRIME)
         }
     }
     var navHasFocus by remember { mutableStateOf(false) }
@@ -229,8 +236,8 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         }
     }
 
-    // A home banner asks for another section: Disney, Netflix, or the guide
-    // opened on the UK sports channels.
+    // A home banner asks for another section: Disney, Netflix, Prime Video,
+    // or the guide opened on the UK sports channels.
     val openFromHome: (String) -> Unit = { name ->
         if (name == Section.GUIDE) guideViewModel.openGroup(SKY_SPORTS_GROUP)
         openSection(name)
@@ -284,7 +291,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
                 .focusGroup(),
         ) {
             when (selectedName) {
-                Section.HOME, Section.SHOWS, Section.MOVIES, Section.DISNEY, Section.NETFLIX ->
+                Section.HOME, Section.SHOWS, Section.MOVIES, Section.DISNEY, Section.NETFLIX, Section.PRIME ->
                     BrowseScreen(
                         viewModel = browseViewModel,
                         searchOpen = searchOpen,

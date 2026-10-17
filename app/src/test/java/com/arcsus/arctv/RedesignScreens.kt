@@ -160,6 +160,9 @@ class RedesignScreens {
     private val netflix = (films.drop(4) + shows.drop(1)).shuffled(kotlin.random.Random(7)).map {
         CollectionTitle(it.id, it.type, it.title, it.year, it.poster)
     }
+    private val prime = (films.drop(1) + shows).shuffled(kotlin.random.Random(9)).map {
+        CollectionTitle(it.id, it.type, it.title, it.year, it.poster)
+    }
 
     /** IPTV-style channel names, as a UK panel spells them. */
     private val sportsChannels = listOf(
@@ -233,7 +236,7 @@ class RedesignScreens {
         settle(1_500)
     }
 
-    private val menu = listOf("Home", "Shows", "Movies", "Disney", "Netflix", "Live TV", "Guide")
+    private val menu = listOf("Home", "Shows", "Movies", "Disney", "Netflix", "Prime Video", "Live TV", "Guide")
     private fun focusOnMenu() = menu.any { focused(it) }
 
     @Suppress("UNCHECKED_CAST")
@@ -260,7 +263,7 @@ class RedesignScreens {
                 WatchEntry(kind = "tv", item = breakingBad, season = 2, episode = 5, nextSeason = 2, nextEpisode = 6),
                 WatchEntry(kind = "movie", item = films[4]),
             ),
-            collections = mapOf("disney" to disney, "netflix" to netflix),
+            collections = mapOf("disney" to disney, "netflix" to netflix, "prime" to prime),
             collectionErrors = emptyMap(),
         )
 
@@ -291,6 +294,10 @@ class RedesignScreens {
         key(Key.DirectionRight)
         settle(2_000)
         snap("03-home-banner-sky")
+        key(Key.DirectionRight, 2)
+        settle(2_000)
+        snap("03b-home-banner-prime")
+        key(Key.DirectionLeft, 2)
 
         key(Key.DirectionDown) // Continue watching
         key(Key.DirectionDown) // Top 10
@@ -316,6 +323,10 @@ class RedesignScreens {
         openSection("Netflix")
         settle(5_000)
         snap("08-netflix")
+
+        openSection("Prime Video")
+        settle(5_000)
+        snap("08b-prime")
 
         openSection("Guide")
         // The guide's own loading runs again on mount; re-seed what it overwrote.

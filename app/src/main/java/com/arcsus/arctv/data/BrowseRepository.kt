@@ -31,9 +31,9 @@ data class CatalogItem(
 }
 
 /**
- * A title in one of the pre-built collections (Disney, Netflix). Disney's
- * films carry their pre-searched best source; Netflix's titles leave these
- * out and search live, as Movies and TV Shows do.
+ * A title in one of the pre-built collections (Disney, Netflix, Prime Video).
+ * Disney's films carry their pre-searched best source; Netflix's and Prime
+ * Video's titles leave these out and search live, as Movies and TV Shows do.
  */
 @Serializable
 data class CollectionTitle(
@@ -173,6 +173,9 @@ class BrowseRepository(
         /** The films and series on Netflix UK. */
         private const val NETFLIX_FUNCTION_URL =
             "https://rrzhigacwzkfyhzysirt.supabase.co/functions/v1/arc-netflix"
+        /** The films and series on Prime Video UK. */
+        private const val PRIME_FUNCTION_URL =
+            "https://rrzhigacwzkfyhzysirt.supabase.co/functions/v1/arc-prime"
         private const val SUPABASE_KEY = "sb_publishable_ayHyFxZX7DyInLz3qvZnng_0EUT_EFw"
     }
 
@@ -190,12 +193,16 @@ class BrowseRepository(
     }
 
     /**
-     * A collection's whole catalogue ("disney" or "netflix"), in the
+     * A collection's whole catalogue ("disney", "netflix" or "prime"), in the
      * backend's popularity order. Small enough to load at once, so its page
      * searches and sorts on the device, as the web app's does.
      */
     suspend fun collection(name: String): List<CollectionTitle> = call { t ->
-        val url = if (name == "disney") DISNEY_FUNCTION_URL else NETFLIX_FUNCTION_URL
+        val url = when (name) {
+            "disney" -> DISNEY_FUNCTION_URL
+            "prime" -> PRIME_FUNCTION_URL
+            else -> NETFLIX_FUNCTION_URL
+        }
         val p = json.decodeFromString<CollectionResponse>(post(buildJsonObject { put("action", "list") }, t, url))
         p.error?.let { throw BrowseException(it) }
         p.titles

@@ -15,11 +15,13 @@ Just Player, …).
   (hearted titles). Back takes you up to the menu, and from there Home.
   Styled with the web app's dark theme: near-black ground,
   hairline borders, the Arc blue accent, Netflix's white focus.
-- **Disney, Sky Sports and Netflix banners** — the web app's home banners:
-  LEFT/RIGHT slides between them, OK opens Disney (every Disney and Pixar
-  feature, pre-searched so Play starts at once), the guide on the UK sports
-  channels, or Netflix (the films and series on Netflix UK). Both collections
-  have their own section with search, sort and (Netflix) All / Films / Series.
+- **Disney, Sky Sports, Netflix and Prime Video banners** — the web app's
+  home banners, side by side: LEFT/RIGHT moves between them, OK opens Disney
+  (every Disney and Pixar feature, pre-searched so Play starts at once), the
+  guide on the UK sports channels, Netflix (the films and series on Netflix
+  UK) or Prime Video (the films and series included with Prime Video UK).
+  Each collection has its own section with search, sort and (Netflix, Prime
+  Video) All / Films / Series.
 - **TV guide** — as on the web: pick your channel groups, then each channel
   shows its logo over its Sky channel number, a still of what's on with a
   progress bar, and now and next. Listings, numbers, logos and stills come

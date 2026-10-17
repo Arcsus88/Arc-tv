@@ -37,7 +37,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * One of Home's link banners (Disney, Sky Sports, Netflix), as on the web.
+ * One of Home's link banners (Disney, Sky Sports, Netflix, Prime Video), as on the web.
  * [stops] and [center] describe the web banner's CSS backdrop, a
  * `radial-gradient(ellipse at …)`; [blurb] is what the details area above
  * the rows says while the banner is focused.
@@ -55,15 +55,17 @@ class HomeBanner(
     val onOpen: () -> Unit,
 )
 
-/** The web app's three banners, in its order: Disney, Sky Sports, Netflix. */
+/** The web app's four banners, in its order: Disney, Sky Sports, Netflix, Prime Video. */
 fun homeBanners(
     disneyMeta: String?,
     netflixMeta: String?,
+    primeMeta: String?,
     onDisney: () -> Unit,
     onSkySports: () -> Unit,
     onNetflix: () -> Unit,
+    onPrime: () -> Unit,
 ): List<HomeBanner> = buildList {
-    // Disney's and Netflix's wait on their catalogues; Sky Sports is always there.
+    // Disney, Netflix and Prime Video wait on their catalogues; Sky Sports is always there.
     if (disneyMeta != null) {
         add(
             HomeBanner(
@@ -116,6 +118,24 @@ fun homeBanners(
             ),
         )
     }
+    if (primeMeta != null) {
+        add(
+            HomeBanner(
+                id = "prime",
+                title = "Prime Video",
+                kind = "COLLECTION",
+                blurb = "The films and series included with Prime Video in the UK. Sources are " +
+                    "searched live, as for Movies and Shows.",
+                meta = primeMeta,
+                logo = R.drawable.logo_prime_video,
+                logoHeight = 44.dp,
+                // radial-gradient(ellipse_at_center,#0b2a52_0%,#04122a_55%,#00050d_100%)
+                stops = arrayOf(0f to Color(0xFF0B2A52), 0.55f to Color(0xFF04122A), 1f to Color(0xFF00050D)),
+                center = Offset(0.5f, 0.5f),
+                onOpen = onPrime,
+            ),
+        )
+    }
 }
 
 /**
@@ -137,9 +157,9 @@ fun DrawScope.drawEllipseGradient(stops: Array<Pair<Float, Color>>, centerFracti
 }
 
 /**
- * The web's three banners side by side, each a third of the row: LEFT/RIGHT
+ * The web's four banners side by side, each a quarter of the row: LEFT/RIGHT
  * moves between them, OK opens the focused one. While a catalogue is still
- * loading (or unreachable) the others stay a third wide, centred.
+ * loading (or unreachable) the others stay a quarter wide, centred.
  * [onShowing] reports the focused banner, for the details area.
  */
 @Composable
@@ -150,7 +170,7 @@ fun HomeBannerRow(
 ) {
     if (banners.isEmpty()) return
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        val tileWidth = (maxWidth - BANNER_GAP * 2) / 3
+        val tileWidth = (maxWidth - BANNER_GAP * 3) / 4
         Row(
             horizontalArrangement = Arrangement.spacedBy(BANNER_GAP, Alignment.CenterHorizontally),
             modifier = Modifier.fillMaxWidth(),

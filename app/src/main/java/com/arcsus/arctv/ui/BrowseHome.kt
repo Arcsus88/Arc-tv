@@ -167,17 +167,22 @@ internal fun NetflixHome(
     val netflixMeta = state.collections[CatalogCollection.NETFLIX.key]?.let { titles ->
         "${titles.count { !it.item.isTv }} films · ${titles.count { it.item.isTv }} series"
     }
+    val primeMeta = state.collections[CatalogCollection.PRIME.key]?.let { titles ->
+        "${titles.count { !it.item.isTv }} films · ${titles.count { it.item.isTv }} series"
+    }
     val openSection by rememberUpdatedState(onOpenSection)
     // Remembered: the banners (and the spotlight holding one) must stay the
     // same objects across recompositions, or reporting the one in view
     // recomposes, rebuilds them, and reports again, forever.
-    val banners = remember(disneyMeta, netflixMeta) {
+    val banners = remember(disneyMeta, netflixMeta, primeMeta) {
         homeBanners(
             disneyMeta = disneyMeta,
             netflixMeta = netflixMeta,
+            primeMeta = primeMeta,
             onDisney = { openSection(Section.DISNEY) },
             onSkySports = { openSection(Section.GUIDE) },
             onNetflix = { openSection(Section.NETFLIX) },
+            onPrime = { openSection(Section.PRIME) },
         )
     }
 
