@@ -345,6 +345,13 @@ class RedesignScreens {
         settle(5_000)
         snap("11-movies")
 
+        // Movies' own search: its matches in the grid's place (the show is left out).
+        browseState.value = browseState.value.copy(
+            query = "dune", searchResults = listOf(dune, breakingBad, spiderVerse), searching = false, error = null,
+        )
+        settle(5_000)
+        snap("11b-movies-search")
+
         openSection("Home")
         settle(3_000)
         snap("12-home-menu")

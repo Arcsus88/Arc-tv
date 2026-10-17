@@ -1,5 +1,6 @@
 package com.arcsus.arctv.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -152,9 +153,21 @@ fun BrowseScreen(
         when {
             collection != null -> CollectionScreen(viewModel, collection)
             state.tab != BrowseTab.HOME -> Column(Modifier.fillMaxSize().padding(horizontal = TV_INSET_H)) {
+                val searchFocus = remember { FocusRequester() }
                 Spacer(Modifier.height(6.dp))
-                CategoryBar(viewModel)
-                DiscoverGrid(viewModel)
+                CategoryBar(viewModel, searchFocus)
+                if (state.searchResults != null || state.searching) {
+                    SectionResults(viewModel)
+                    // Back from the results: the grid again, and the box
+                    // ready for another search. (On the menu, Back still
+                    // means Home.)
+                    BackHandler(enabled = canTakeFocus()) {
+                        viewModel.clearSearch()
+                        runCatching { searchFocus.requestFocus() }
+                    }
+                } else {
+                    DiscoverGrid(viewModel)
+                }
             }
             state.loadingHome && state.rows.isEmpty() -> CenteredMessage("Loading catalogue…")
             state.error != null && state.rows.isEmpty() -> CenteredError(state.error!!) { viewModel.loadHome() }
@@ -272,11 +285,12 @@ fun BrowseScreen(
 
 /**
  * Movies / Shows: the sort as pills, then the genre as one drop-down pill
- * (the web's filter bar), over a grid of posters.
+ * (the web's filter bar), and a search box like the collections' -- over a
+ * grid of posters.
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun CategoryBar(viewModel: BrowseViewModel) {
+private fun CategoryBar(viewModel: BrowseViewModel, searchFocus: FocusRequester) {
     val state by viewModel.state.collectAsState()
     var pickingGenre by remember { mutableStateOf(false) }
     val genreName = state.currentGenres.firstOrNull { it.id == state.genreId }?.name
@@ -299,6 +313,14 @@ private fun CategoryBar(viewModel: BrowseViewModel) {
             ArcChip(label = mode.label, selected = state.sortMode == mode, onClick = { viewModel.setSort(mode) }, compact = true)
             Spacer(Modifier.width(6.dp))
         }
+        Spacer(Modifier.width(14.dp))
+        TvSearchField(
+            query = state.query,
+            onQueryChange = viewModel::setQuery,
+            onSearch = viewModel::search,
+            modifier = Modifier.weight(1f).focusRequester(searchFocus),
+            placeholder = if (state.tab == BrowseTab.TV) "Search shows…" else "Search movies…",
+        )
     }
     if (pickingGenre) {
         val currentFocus = remember { FocusRequester() }
@@ -356,7 +378,7 @@ private fun SearchOverlay(viewModel: BrowseViewModel, onClose: () -> Unit) {
                 }
                 Spacer(Modifier.height(18.dp))
                 if (state.searchResults != null) {
-                    SearchResults(state.searchResults!!, state.searching, viewModel)
+                    SearchResults(state.searchResults!!, state.searching, viewModel, state.error)
                 } else {
                     Text(
                         "Type a title and press OK to search films and shows.",
@@ -400,11 +422,37 @@ private fun DiscoverGrid(viewModel: BrowseViewModel) {
     }
 }
 
+/**
+ * Movies / Shows search: the matches of the section's own kind, in the
+ * grid's place. The search itself spans both, so a film searched for under
+ * Shows is pointed to Movies rather than reported missing.
+ */
 @Composable
-private fun SearchResults(results: List<CatalogItem>, searching: Boolean, viewModel: BrowseViewModel) {
+private fun SectionResults(viewModel: BrowseViewModel) {
+    val state by viewModel.state.collectAsState()
+    val tv = state.tab == BrowseTab.TV
+    val all = state.searchResults.orEmpty()
+    val mine = all.filter { it.isTv == tv }
+    if (mine.isEmpty() && all.isNotEmpty() && !state.searching) {
+        CenteredMessage(
+            if (tv) "No shows match “${state.query.trim()}”. ${all.size} found in Movies."
+            else "No movies match “${state.query.trim()}”. ${all.size} found in Shows.",
+        )
+    } else {
+        SearchResults(mine, state.searching, viewModel, state.error)
+    }
+}
+
+@Composable
+private fun SearchResults(
+    results: List<CatalogItem>,
+    searching: Boolean,
+    viewModel: BrowseViewModel,
+    error: String? = null,
+) {
     when {
         searching && results.isEmpty() -> CenteredMessage("Searching…")
-        results.isEmpty() -> CenteredMessage("Nothing found. Try another title.")
+        results.isEmpty() -> CenteredMessage(error ?: "Nothing found. Try another title.")
         else -> LazyVerticalGrid(
             columns = GridCells.Fixed(POSTER_COLUMNS),
             horizontalArrangement = Arrangement.spacedBy(14.dp),

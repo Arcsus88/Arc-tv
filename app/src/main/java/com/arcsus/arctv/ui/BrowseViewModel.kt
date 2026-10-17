@@ -188,6 +188,9 @@ class BrowseViewModel(
     /** The discover page in flight, cancelled when the group or section changes. */
     private var discoverJob: Job? = null
 
+    /** The title search in flight, cancelled when the search is cleared or the section changes. */
+    private var searchJob: Job? = null
+
     private val seasonsCache = mutableMapOf<Int, List<Season>>()
     private val episodesCache = mutableMapOf<String, List<Episode>>()
     private val sourcesCache = mutableMapOf<String, List<Source>>()
@@ -260,6 +263,9 @@ class BrowseViewModel(
     fun setTab(tab: BrowseTab) {
         if (tab == _state.value.tab) return
         discoverJob?.cancel()
+        // Movies and Shows each have a search box; a search belongs to the
+        // section it was typed in.
+        clearSearch()
         _state.update {
             it.copy(
                 tab = tab,
@@ -313,14 +319,18 @@ class BrowseViewModel(
         if (item.isTv) null
         else _state.value.collections[CatalogCollection.DISNEY.key]?.firstOrNull { it.id == item.id && it.ready }
 
+    // Picking a genre or sort means browsing again: the grid comes back in
+    // place of any search results.
     fun setGenre(genreId: Int?) {
         if (genreId == _state.value.genreId) return
+        clearSearch()
         _state.update { it.copy(genreId = genreId) }
         reloadDiscover()
     }
 
     fun setSort(sort: SortMode) {
         if (sort == _state.value.sortMode) return
+        clearSearch()
         _state.update { it.copy(sortMode = sort) }
         reloadDiscover()
     }
@@ -392,25 +402,36 @@ class BrowseViewModel(
         }
     }
 
-    fun setQuery(query: String) = _state.update { it.copy(query = query) }
+    /** Emptying the box drops the results, so Movies and Shows go back to their grid. */
+    fun setQuery(query: String) {
+        if (query.isBlank()) clearSearch()
+        _state.update { it.copy(query = query) }
+    }
 
     fun search() {
         val q = _state.value.query.trim()
-        if (q.isEmpty() || _state.value.searching) return
+        if (q.isEmpty()) return
+        // A new search replaces one still running for an older query.
+        searchJob?.cancel()
         _state.update { it.copy(searching = true, error = null) }
-        viewModelScope.launch {
+        searchJob = viewModelScope.launch {
             try {
                 val results = repository.search(q)
                 _state.update { it.copy(searching = false, searchResults = results) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(searching = false, error = e.message ?: "Search failed.") }
+                // No results, so the results page is what says why.
+                _state.update { it.copy(searching = false, searchResults = emptyList(), error = e.message ?: "Search failed.") }
             }
         }
     }
 
-    fun clearSearch() = _state.update { it.copy(query = "", searchResults = null, error = null) }
+    /** Also drops a search in flight, whose results would land on a page that has moved on. */
+    fun clearSearch() {
+        searchJob?.cancel()
+        _state.update { it.copy(query = "", searchResults = null, searching = false, error = null) }
+    }
 
     /** Show the details page for a chosen poster, loading extended metadata. */
     fun openDetails(item: CatalogItem) {

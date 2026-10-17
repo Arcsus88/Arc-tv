@@ -13,6 +13,8 @@ Just Player, …).
   scroll beneath it, the focused row and tile always in the same place. A
   Top 10 row with outlined rank numerals, Continue Watching and My List
   (hearted titles). Back takes you up to the menu, and from there Home.
+  Movies and Shows each have a search box beside their genre and sort
+  pills; the magnifier in the menu searches films and shows together.
   Styled with the web app's dark theme: near-black ground,
   hairline borders, the Arc blue accent, Netflix's white focus.
 - **Disney, Sky Sports, Netflix and Prime Video banners** — the web app's
