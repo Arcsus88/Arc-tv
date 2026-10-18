@@ -184,6 +184,11 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
     }
     var navHasFocus by remember { mutableStateOf(false) }
     var contentHasFocus by remember { mutableStateOf(false) }
+    // The update banner sits between the menu and the content. Focus on its
+    // buttons is as real as focus in the content: without counting it, the
+    // recovery below took every landing on "Update now" for lost focus and
+    // pulled it back down into the screen.
+    var bannerHasFocus by remember { mutableStateOf(false) }
     var contentLostFocusAt by remember { mutableLongStateOf(0L) }
     val nav = remember { NavIntent() }
     val contentFocus = remember { FocusRequester() }
@@ -225,10 +230,25 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         }
     }
 
-    // Netflix: Back from anywhere in a section goes up to the menu; Back on
-    // the menu goes Home; Back on Home's menu leaves the app.
-    BackHandler(enabled = contentHasFocus || (navHasFocus && selectedName != Section.HOME)) {
-        if (contentHasFocus) {
+    // Focus left the content or the banner. If nothing took it at all
+    // (touch-mode devices; the banner's buttons going with "Later"), bring
+    // it back rather than leave the remote dead.
+    val onLeftContent: () -> Unit = {
+        contentLostFocusAt = System.nanoTime()
+        scope.launch {
+            delay(80)
+            if (!navHasFocus && !contentHasFocus && !bannerHasFocus) runCatching { contentFocus.requestFocus() }
+        }
+    }
+
+    // Netflix: Back from anywhere in a section (or the banner above it) goes
+    // up to the menu; Back on the menu goes Home; Back on Home's menu leaves
+    // the app.
+    BackHandler(enabled = contentHasFocus || bannerHasFocus || (navHasFocus && selectedName != Section.HOME)) {
+        if (contentHasFocus || bannerHasFocus) {
+            // Going up out of the section, as UP does -- otherwise the menu
+            // takes the arrival for stray focus and sends it straight back.
+            nav.record(Key.DirectionUp, navHadFocus = false, contentHadFocus = true)
             runCatching { navFocus[selectedName]?.requestFocus() }
         } else {
             proposed = null
@@ -250,8 +270,14 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
-                        Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight ->
-                            nav.record(event.key, navHasFocus, contentHasFocus)
+                        // UP from the banner is coming up out of the section.
+                        // OK counts too: focus that lands on the menu after
+                        // OK took away what was focused ("Later" removing the
+                        // banner) is the platform's doing, whatever arrow
+                        // came before it.
+                        Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight,
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter ->
+                            nav.record(event.key, navHasFocus, contentHasFocus || bannerHasFocus)
                     }
                 }
                 false
@@ -269,24 +295,21 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
                 .focusRequester(contentFocus)
                 .onFocusChanged { state ->
                     contentHasFocus = state.hasFocus
-                    if (!state.hasFocus) {
-                        contentLostFocusAt = System.nanoTime()
-                        // Nothing took focus at all (touch-mode devices):
-                        // bring it back rather than leave the remote dead.
-                        scope.launch {
-                            delay(80)
-                            if (!navHasFocus && !contentHasFocus) runCatching { contentFocus.requestFocus() }
-                        }
-                    }
+                    if (!state.hasFocus) onLeftContent()
                 }
-                // Only UP leaves the content, and only into the menu. A
-                // DPAD-down or sideways press that finds nothing focusable --
-                // a grid still reloading after picking a genre, say -- would
-                // otherwise let focus fall into the menu, and menu items
-                // switch section once focus rests on them.
+                // Of the D-pad, only UP leaves the content, and only into the
+                // menu. A DPAD-down or sideways press that finds nothing
+                // focusable -- a grid still reloading after picking a genre,
+                // say -- would otherwise let focus fall into the menu, and
+                // menu items switch section once focus rests on them. Focus
+                // the app asks for elsewhere (Back up to the menu) arrives as
+                // Enter, and must go through.
                 .focusProperties {
                     exit = { direction ->
-                        if (direction == FocusDirection.Up) FocusRequester.Default else FocusRequester.Cancel
+                        when (direction) {
+                            FocusDirection.Down, FocusDirection.Left, FocusDirection.Right -> FocusRequester.Cancel
+                            else -> FocusRequester.Default
+                        }
                     }
                 }
                 .focusGroup(),
@@ -298,7 +321,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
                         searchOpen = searchOpen,
                         onSearchOpenChange = { searchOpen = it },
                         onOpenSection = openFromHome,
-                        canTakeFocus = { !navHasFocus },
+                        canTakeFocus = { !navHasFocus && !bannerHasFocus },
                     )
                 Section.LIVE -> LiveScreen(liveViewModel)
                 Section.GUIDE -> GuideScreen(guideViewModel)
@@ -324,7 +347,17 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
                     searchOpen = true
                 },
             )
-            UpdateBanner(updateViewModel)
+            Box(
+                Modifier
+                    .onFocusChanged { state ->
+                        val had = bannerHasFocus
+                        bannerHasFocus = state.hasFocus
+                        if (had && !state.hasFocus) onLeftContent()
+                    }
+                    .focusGroup(),
+            ) {
+                UpdateBanner(updateViewModel)
+            }
         }
     }
 }
