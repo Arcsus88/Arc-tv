@@ -74,7 +74,7 @@ fun BrowseScreen(
     viewModel: BrowseViewModel,
     searchOpen: Boolean = false,
     onSearchOpenChange: (Boolean) -> Unit = {},
-    /** A home banner opening another section (Disney, Netflix, Prime Video, the guide). */
+    /** A home banner opening another section (Disney, Netflix, Prime Video, Apple TV, the guide). */
     onOpenSection: (String) -> Unit = {},
     /** Whether Home may put focus on its billboard (not while the menu has it). */
     canTakeFocus: () -> Boolean = { true },

@@ -91,7 +91,7 @@ class SectionSearchTest {
             .fetchSemanticsNodes().isNotEmpty()
 
     private val menuTitles = listOf(
-        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Live TV", "Guide", "Settings",
+        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Apple", "Live", "Guide", "Settings",
     )
 
     /** UP out of the content, LEFT to the start of the menu, RIGHT to [title], OK. */

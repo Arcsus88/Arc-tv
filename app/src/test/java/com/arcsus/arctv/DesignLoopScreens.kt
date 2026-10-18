@@ -162,7 +162,7 @@ class DesignLoopScreens {
      * doing and sent back into the content, so a plain requestFocus won't do.
      */
     private val menuTitles = listOf(
-        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Live TV", "Guide", "Downloads",
+        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Apple", "Live", "Guide", "Downloads",
         "Torrents", "Settings",
     )
 
@@ -213,7 +213,7 @@ class DesignLoopScreens {
                 snap("04-movies-focused")
             }
         }
-        focus("Live TV")
+        focus("Live")
         waitForText("channels", 60_000)
         settle(3_000)
         snap("05-live")

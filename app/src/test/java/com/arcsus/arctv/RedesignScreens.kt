@@ -34,6 +34,7 @@ import com.arcsus.arctv.ui.BrowseViewModel
 import com.arcsus.arctv.ui.GuideGroup
 import com.arcsus.arctv.ui.GuideViewModel
 import com.arcsus.arctv.ui.HomeScreen
+import com.arcsus.arctv.ui.SettingsViewModel
 import com.arcsus.arctv.ui.theme.ArcBackground
 import com.arcsus.arctv.ui.theme.ArcTvTheme
 import com.github.takahirom.roborazzi.captureScreenRoboImage
@@ -163,6 +164,9 @@ class RedesignScreens {
     private val prime = (films.drop(1) + shows).shuffled(kotlin.random.Random(9)).map {
         CollectionTitle(it.id, it.type, it.title, it.year, it.poster)
     }
+    private val appleTv = (films.drop(2) + shows.drop(2)).shuffled(kotlin.random.Random(11)).map {
+        CollectionTitle(it.id, it.type, it.title, it.year, it.poster)
+    }
 
     /** IPTV-style channel names, as a UK panel spells them. */
     private val sportsChannels = listOf(
@@ -236,7 +240,7 @@ class RedesignScreens {
         settle(1_500)
     }
 
-    private val menu = listOf("Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Live TV", "Guide")
+    private val menu = listOf("Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Apple", "Live", "Guide")
     private fun focusOnMenu() = menu.any { focused(it) }
 
     @Suppress("UNCHECKED_CAST")
@@ -263,7 +267,7 @@ class RedesignScreens {
                 WatchEntry(kind = "tv", item = breakingBad, season = 2, episode = 5, nextSeason = 2, nextEpisode = 6),
                 WatchEntry(kind = "movie", item = films[4]),
             ),
-            collections = mapOf("disney" to disney, "netflix" to netflix, "prime" to prime),
+            collections = mapOf("disney" to disney, "netflix" to netflix, "prime" to prime, "appletv" to appleTv),
             collectionErrors = emptyMap(),
         )
 
@@ -297,7 +301,13 @@ class RedesignScreens {
         key(Key.DirectionRight, 2)
         settle(2_000)
         snap("03b-home-banner-prime")
-        key(Key.DirectionLeft, 2)
+        // The fifth banner: the row scrolls to bring it in.
+        key(Key.DirectionRight)
+        settle(2_000)
+        snap("03c-home-banner-appletv")
+        key(Key.DirectionLeft, 3)
+        settle(1_000)
+        snap("03d-home-banner-back")
 
         key(Key.DirectionDown) // Continue watching
         key(Key.DirectionDown) // Top 10
@@ -328,6 +338,10 @@ class RedesignScreens {
         settle(5_000)
         snap("08b-prime")
 
+        openSection("Apple")
+        settle(5_000)
+        snap("08c-appletv")
+
         openSection("Guide")
         // The guide's own loading runs again on mount; re-seed what it overwrote.
         guideState.value = guideState.value.copy(
@@ -355,6 +369,14 @@ class RedesignScreens {
         openSection("Home")
         settle(3_000)
         snap("12-home-menu")
+
+        // With Real-Debrid connected the menu also carries Downloads and
+        // Torrents: the most it has to fit, beside the clock and settings.
+        val settings = provider[SettingsViewModel::class.java]
+        val settingsState = stateOf<SettingsViewModel.UiState>(settings)
+        settingsState.value = settingsState.value.copy(rdConnected = true)
+        settle(2_000)
+        snap("13-menu-real-debrid")
     }
 
     private companion object {

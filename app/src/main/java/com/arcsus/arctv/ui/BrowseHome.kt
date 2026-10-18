@@ -170,19 +170,24 @@ internal fun NetflixHome(
     val primeMeta = state.collections[CatalogCollection.PRIME.key]?.let { titles ->
         "${titles.count { !it.item.isTv }} films · ${titles.count { it.item.isTv }} series"
     }
+    val appleTvMeta = state.collections[CatalogCollection.APPLETV.key]?.let { titles ->
+        "${titles.count { !it.item.isTv }} films · ${titles.count { it.item.isTv }} series"
+    }
     val openSection by rememberUpdatedState(onOpenSection)
     // Remembered: the banners (and the spotlight holding one) must stay the
     // same objects across recompositions, or reporting the one in view
     // recomposes, rebuilds them, and reports again, forever.
-    val banners = remember(disneyMeta, netflixMeta, primeMeta) {
+    val banners = remember(disneyMeta, netflixMeta, primeMeta, appleTvMeta) {
         homeBanners(
             disneyMeta = disneyMeta,
             netflixMeta = netflixMeta,
             primeMeta = primeMeta,
+            appleTvMeta = appleTvMeta,
             onDisney = { openSection(Section.DISNEY) },
             onSkySports = { openSection(Section.GUIDE) },
             onNetflix = { openSection(Section.NETFLIX) },
             onPrime = { openSection(Section.PRIME) },
+            onAppleTv = { openSection(Section.APPLE_TV) },
         )
     }
 
@@ -228,8 +233,11 @@ internal fun NetflixHome(
                                 HomeBannerRow(
                                     banners = banners,
                                     onShowing = { spotlight = Spotlight.Banner(it) },
+                                    // The row runs edge to edge, so banners scroll
+                                    // out under the screen's margins; it keeps
+                                    // its tiles inside them itself.
                                     modifier = Modifier
-                                        .padding(horizontal = TV_INSET_H, vertical = 8.dp)
+                                        .padding(vertical = 8.dp)
                                         // UP goes back to the billboard's Play, as on Netflix.
                                         .focusProperties { up = playFocus },
                                 )

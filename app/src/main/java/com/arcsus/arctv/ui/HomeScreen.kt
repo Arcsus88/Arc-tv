@@ -124,9 +124,12 @@ internal object Section {
     const val MOVIES = "Movies"
     const val DISNEY = "Disney"
     const val NETFLIX = "Netflix"
-    // "Prime", not "Prime Video": the menu has no room to spare (see NavLabel).
+    // "Prime", "Apple" and "Live", not "Prime Video", "Apple TV" and "Live
+    // TV": the menu has no room to spare (see NavLabel). The banners and the
+    // sections' own headings keep the full names.
     const val PRIME = "Prime"
-    const val LIVE = "Live TV"
+    const val APPLE_TV = "Apple"
+    const val LIVE = "Live"
     const val GUIDE = "Guide"
     const val DOWNLOADS = "Downloads"
     const val TORRENTS = "Torrents"
@@ -156,7 +159,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         addAll(
             listOf(
                 Section.HOME, Section.SHOWS, Section.MOVIES, Section.DISNEY, Section.NETFLIX, Section.PRIME,
-                Section.LIVE, Section.GUIDE,
+                Section.APPLE_TV, Section.LIVE, Section.GUIDE,
             ),
         )
         if (settingsState.rdConnected) addAll(listOf(Section.DOWNLOADS, Section.TORRENTS))
@@ -180,6 +183,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
             Section.DISNEY -> browseViewModel.setTab(BrowseTab.DISNEY)
             Section.NETFLIX -> browseViewModel.setTab(BrowseTab.NETFLIX)
             Section.PRIME -> browseViewModel.setTab(BrowseTab.PRIME)
+            Section.APPLE_TV -> browseViewModel.setTab(BrowseTab.APPLETV)
         }
     }
     var navHasFocus by remember { mutableStateOf(false) }
@@ -258,7 +262,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
     }
 
     // A home banner asks for another section: Disney, Netflix, Prime Video,
-    // or the guide opened on the UK sports channels.
+    // Apple TV, or the guide opened on the UK sports channels.
     val openFromHome: (String) -> Unit = { name ->
         if (name == Section.GUIDE) guideViewModel.openGroup(SKY_SPORTS_GROUP)
         openSection(name)
@@ -315,7 +319,8 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
                 .focusGroup(),
         ) {
             when (selectedName) {
-                Section.HOME, Section.SHOWS, Section.MOVIES, Section.DISNEY, Section.NETFLIX, Section.PRIME ->
+                Section.HOME, Section.SHOWS, Section.MOVIES, Section.DISNEY, Section.NETFLIX, Section.PRIME,
+                Section.APPLE_TV ->
                     BrowseScreen(
                         viewModel = browseViewModel,
                         searchOpen = searchOpen,
@@ -467,7 +472,7 @@ private fun NavLabel(label: String, selected: Boolean, onClick: () -> Unit, modi
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
         modifier = modifier,
     ) {
-        // Snug: with Downloads and Torrents (Real-Debrid) the menu has ten
+        // Snug: with Downloads and Torrents (Real-Debrid) the menu has eleven
         // labels to fit across a 960dp-wide TV and still leave the clock and
         // settings their room.
         Text(
@@ -476,7 +481,7 @@ private fun NavLabel(label: String, selected: Boolean, onClick: () -> Unit, modi
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             maxLines = 1,
             softWrap = false,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
         )
     }
 }

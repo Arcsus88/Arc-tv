@@ -2,19 +2,27 @@ package com.arcsus.arctv.ui
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.key
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -26,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -37,7 +46,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * One of Home's link banners (Disney, Sky Sports, Netflix, Prime Video), as on the web.
+ * One of Home's link banners (Disney, Sky Sports, Netflix, Prime Video, Apple TV), as on the web.
  * [stops] and [center] describe the web banner's CSS backdrop, a
  * `radial-gradient(ellipse at …)`; [blurb] is what the details area above
  * the rows says while the banner is focused.
@@ -55,17 +64,19 @@ class HomeBanner(
     val onOpen: () -> Unit,
 )
 
-/** The web app's four banners, in its order: Disney, Sky Sports, Netflix, Prime Video. */
+/** The web app's five banners, in its order: Disney, Sky Sports, Netflix, Prime Video, Apple TV. */
 fun homeBanners(
     disneyMeta: String?,
     netflixMeta: String?,
     primeMeta: String?,
+    appleTvMeta: String?,
     onDisney: () -> Unit,
     onSkySports: () -> Unit,
     onNetflix: () -> Unit,
     onPrime: () -> Unit,
+    onAppleTv: () -> Unit,
 ): List<HomeBanner> = buildList {
-    // Disney, Netflix and Prime Video wait on their catalogues; Sky Sports is always there.
+    // The collections wait on their catalogues; Sky Sports is always there.
     if (disneyMeta != null) {
         add(
             HomeBanner(
@@ -136,6 +147,24 @@ fun homeBanners(
             ),
         )
     }
+    if (appleTvMeta != null) {
+        add(
+            HomeBanner(
+                id = "appletv",
+                title = "Apple TV",
+                kind = "COLLECTION",
+                blurb = "The films and series streaming on Apple TV in the UK. Sources are " +
+                    "searched live, as for Movies and Shows.",
+                meta = appleTvMeta,
+                logo = R.drawable.logo_apple_tv,
+                logoHeight = 40.dp,
+                // radial-gradient(ellipse_at_top,#3a3a3e_0%,#161618_55%,#050505_100%)
+                stops = arrayOf(0f to Color(0xFF3A3A3E), 0.55f to Color(0xFF161618), 1f to Color(0xFF050505)),
+                center = Offset(0.5f, 0f),
+                onOpen = onAppleTv,
+            ),
+        )
+    }
 }
 
 /**
@@ -157,11 +186,14 @@ fun DrawScope.drawEllipseGradient(stops: Array<Pair<Float, Color>>, centerFracti
 }
 
 /**
- * The web's four banners side by side, each a quarter of the row: LEFT/RIGHT
- * moves between them, OK opens the focused one. While a catalogue is still
- * loading (or unreachable) the others stay a quarter wide, centred.
- * [onShowing] reports the focused banner, for the details area.
+ * The web's banners in a row that scrolls, as on the web: four fit between
+ * the screen's margins, each a quarter of that width, and the fifth peeks in
+ * at the edge. LEFT/RIGHT moves between them, the row scrolling only once
+ * the focused banner would cross a margin; OK opens the focused one. While a
+ * catalogue is still loading (or unreachable) the others keep their width,
+ * centred. [onShowing] reports the focused banner, for the details area.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeBannerRow(
     banners: List<HomeBanner>,
@@ -169,17 +201,44 @@ fun HomeBannerRow(
     modifier: Modifier = Modifier,
 ) {
     if (banners.isEmpty()) return
+    val listState = rememberLazyListState()
+    // Disney's banner arrives in front of the rest once its catalogue loads,
+    // and the row would keep the banner it started on in view, opening it
+    // scrolled past Disney. Back to the first.
+    val first = banners.first().id
+    LaunchedEffect(first) { listState.scrollToItem(0) }
+    val density = LocalDensity.current
+    val inset = remember(density) { InsetSpec(with(density) { TV_INSET_H.toPx() }) }
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        val tileWidth = (maxWidth - BANNER_GAP * 3) / 4
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(BANNER_GAP, Alignment.CenterHorizontally),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            banners.forEach { banner ->
-                key(banner.id) {
+        val tileWidth = (maxWidth - TV_INSET_H * 2 - BANNER_GAP * 3) / 4
+        CompositionLocalProvider(LocalBringIntoViewSpec provides inset) {
+            LazyRow(
+                state = listState,
+                horizontalArrangement = Arrangement.spacedBy(BANNER_GAP, Alignment.CenterHorizontally),
+                contentPadding = PaddingValues(horizontal = TV_INSET_H),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                items(banners, key = { it.id }) { banner ->
                     BannerTile(banner, onFocus = { onShowing(banner) }, modifier = Modifier.width(tileWidth))
                 }
             }
+        }
+    }
+}
+
+/**
+ * Scrolls the banner row only as far as it takes to bring the focused banner
+ * inside the screen's margins ([insetPx] at either side), so moving along the
+ * four in view leaves the row still.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private class InsetSpec(private val insetPx: Float) : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        val end = containerSize - insetPx
+        return when {
+            offset < insetPx -> offset - insetPx
+            offset + size > end -> offset + size - end
+            else -> 0f
         }
     }
 }

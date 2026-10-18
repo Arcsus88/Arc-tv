@@ -157,7 +157,7 @@ class LiveFocusTest {
      * platform's doing and sent back into the content.)
      */
     private val menuTitles = listOf(
-        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Live TV", "Guide", "Settings",
+        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Apple", "Live", "Guide", "Settings",
     )
 
     private fun menuTo(title: String) {
@@ -172,9 +172,9 @@ class LiveFocusTest {
         key(Key.DirectionCenter)
     }
 
-    /** The Live screen's own "Live TV" heading, besides the menu's label. */
+    /** The Live screen's own "Live TV" heading (the menu's label reads "Live"). */
     private fun onLiveScreen(): Boolean =
-        rule.onAllNodes(hasText("Live TV")).fetchSemanticsNodes().size >= 2
+        rule.onAllNodes(hasText("Live TV")).fetchSemanticsNodes().isNotEmpty()
 
     /**
      * What a TV does the instant the focused view disappears: View.clearFocus
@@ -190,7 +190,7 @@ class LiveFocusTest {
     fun openingFavouritesStaysOnLive() {
         rule.setContent { ArcTvTheme { HomeScreen(factory) } }
         settle(300)
-        openSection("Live TV")
+        openSection("Live")
         val loaded = waitFor("Favourites", 20_000)
         if (!loaded) println("live-focus: tree=\n" + rule.onRoot().printToString())
         assertTrue("Live tab did not load the playlist", loaded)
@@ -218,7 +218,7 @@ class LiveFocusTest {
     fun backToGroupsStaysOnLive() {
         rule.setContent { ArcTvTheme { HomeScreen(factory) } }
         settle(300)
-        openSection("Live TV")
+        openSection("Live")
         assertTrue("Live tab did not load the playlist", waitFor("UK", 20_000))
 
         press { rule.onNode(hasText("UK", substring = true) and hasClickAction()) }

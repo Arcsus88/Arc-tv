@@ -82,7 +82,7 @@ class MenuFocusTest {
     private fun onBanner() = isFocused("Update now") || isFocused("Later")
 
     private val menuTitles = listOf(
-        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Live TV", "Guide", "Settings",
+        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Apple", "Live", "Guide", "Settings",
     )
 
     private fun onMenu() = menuTitles.any { isFocused(it) }
