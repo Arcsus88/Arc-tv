@@ -162,7 +162,7 @@ class DesignLoopScreens {
      * doing and sent back into the content, so a plain requestFocus won't do.
      */
     private val menuTitles = listOf(
-        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Apple", "Live", "Guide", "Downloads",
+        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Apple", "Hulu", "Live", "Guide", "Downloads",
         "Torrents", "Settings",
     )
 

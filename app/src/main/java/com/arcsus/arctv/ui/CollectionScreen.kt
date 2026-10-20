@@ -60,7 +60,7 @@ private fun norm(s: String): String =
  * A collection's page, after the web's CollectionView: every Disney-branded
  * and Pixar feature with its pre-searched best source (films with nothing
  * seeded are greyed out), or the films and series on Netflix UK, Prime
- * Video UK or Apple TV UK, which search live. The whole catalogue is loaded,
+ * Video UK, Apple TV UK or Hulu (US), which search live. The whole catalogue is loaded,
  * so search filters as you type and the sort is instant; the collections
  * with series get All / Films / Series chips.
  */

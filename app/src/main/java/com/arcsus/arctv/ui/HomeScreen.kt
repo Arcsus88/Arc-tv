@@ -46,6 +46,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -125,10 +126,11 @@ internal object Section {
     const val DISNEY = "Disney"
     const val NETFLIX = "Netflix"
     // "Prime", "Apple" and "Live", not "Prime Video", "Apple TV" and "Live
-    // TV": the menu has no room to spare (see NavLabel). The banners and the
+    // TV": the menu has no room to spare (see TopNav). The banners and the
     // sections' own headings keep the full names.
     const val PRIME = "Prime"
     const val APPLE_TV = "Apple"
+    const val HULU = "Hulu"
     const val LIVE = "Live"
     const val GUIDE = "Guide"
     const val DOWNLOADS = "Downloads"
@@ -159,7 +161,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         addAll(
             listOf(
                 Section.HOME, Section.SHOWS, Section.MOVIES, Section.DISNEY, Section.NETFLIX, Section.PRIME,
-                Section.APPLE_TV, Section.LIVE, Section.GUIDE,
+                Section.APPLE_TV, Section.HULU, Section.LIVE, Section.GUIDE,
             ),
         )
         if (settingsState.rdConnected) addAll(listOf(Section.DOWNLOADS, Section.TORRENTS))
@@ -184,6 +186,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
             Section.NETFLIX -> browseViewModel.setTab(BrowseTab.NETFLIX)
             Section.PRIME -> browseViewModel.setTab(BrowseTab.PRIME)
             Section.APPLE_TV -> browseViewModel.setTab(BrowseTab.APPLETV)
+            Section.HULU -> browseViewModel.setTab(BrowseTab.HULU)
         }
     }
     var navHasFocus by remember { mutableStateOf(false) }
@@ -261,8 +264,8 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         }
     }
 
-    // A home banner asks for another section: Disney, Netflix, Prime Video,
-    // Apple TV, or the guide opened on the UK sports channels.
+    // A home banner asks for another section: one of the collections, or the
+    // guide opened on the UK sports channels.
     val openFromHome: (String) -> Unit = { name ->
         if (name == Section.GUIDE) guideViewModel.openGroup(SKY_SPORTS_GROUP)
         openSection(name)
@@ -320,7 +323,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         ) {
             when (selectedName) {
                 Section.HOME, Section.SHOWS, Section.MOVIES, Section.DISNEY, Section.NETFLIX, Section.PRIME,
-                Section.APPLE_TV ->
+                Section.APPLE_TV, Section.HULU ->
                     BrowseScreen(
                         viewModel = browseViewModel,
                         searchOpen = searchOpen,
@@ -424,10 +427,16 @@ private fun TopNav(
             modifier = Modifier.onFocusChanged { if (it.isFocused) onFocused("Search") },
         )
         Spacer(Modifier.width(6.dp))
-        sections.filter { it != Section.SETTINGS }.forEach { name ->
+        val labels = sections.filter { it != Section.SETTINGS }
+        // With Downloads and Torrents (Real-Debrid) there are twelve labels,
+        // which only leave the clock and settings their room on a 960dp-wide
+        // TV packed tighter; the usual ten keep the roomier spacing.
+        val labelPadding = if (labels.size > 10) 4.dp else 6.dp
+        labels.forEach { name ->
             NavLabel(
                 label = name,
                 selected = name == selected,
+                padding = labelPadding,
                 onClick = { onActivate(name) },
                 modifier = Modifier
                     .focusRequester(requesterFor(name))
@@ -456,7 +465,13 @@ private fun TopNav(
 }
 
 @Composable
-private fun NavLabel(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun NavLabel(
+    label: String,
+    selected: Boolean,
+    padding: Dp,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val shape = RoundedCornerShape(50)
     Surface(
         onClick = onClick,
@@ -472,16 +487,14 @@ private fun NavLabel(label: String, selected: Boolean, onClick: () -> Unit, modi
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
         modifier = modifier,
     ) {
-        // Snug: with Downloads and Torrents (Real-Debrid) the menu has eleven
-        // labels to fit across a 960dp-wide TV and still leave the clock and
-        // settings their room.
+        // Snug: [padding] is as little as the menu's crowding needs (see TopNav).
         Text(
             label,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             maxLines = 1,
             softWrap = false,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = padding, vertical = 6.dp),
         )
     }
 }

@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class BrowseTab { HOME, MOVIES, TV, DISNEY, NETFLIX, PRIME, APPLETV }
+enum class BrowseTab { HOME, MOVIES, TV, DISNEY, NETFLIX, PRIME, APPLETV, HULU }
 
 /** The pre-built catalogues, each with its own section and home banner (as on the web). */
 enum class CatalogCollection(val key: String, val label: String, val noun: String, val hasSeries: Boolean) {
@@ -31,12 +31,13 @@ enum class CatalogCollection(val key: String, val label: String, val noun: Strin
     NETFLIX("netflix", "Netflix", "films & series", hasSeries = true),
     PRIME("prime", "Prime Video", "films & series", hasSeries = true),
     APPLETV("appletv", "Apple TV", "films & series", hasSeries = true),
+    HULU("hulu", "Hulu", "films & series", hasSeries = true),
 }
 
 /** A collection page's own sort, applied on the device to the loaded catalogue. */
 enum class CollectionSort(val label: String) { POPULAR("Popular"), NEWEST("Newest"), OLDEST("Oldest"), AZ("A–Z") }
 
-/** Films, series or both, for a collection that has series (Netflix, Prime Video, Apple TV). */
+/** Films, series or both, for a collection that has series (all but Disney). */
 enum class CollectionKind(val label: String, val type: String?) { ALL("All", null), FILMS("Films", "movie"), SERIES("Series", "tv") }
 
 val BrowseTab.collection: CatalogCollection?
@@ -45,6 +46,7 @@ val BrowseTab.collection: CatalogCollection?
         BrowseTab.NETFLIX -> CatalogCollection.NETFLIX
         BrowseTab.PRIME -> CatalogCollection.PRIME
         BrowseTab.APPLETV -> CatalogCollection.APPLETV
+        BrowseTab.HULU -> CatalogCollection.HULU
         else -> null
     }
 
@@ -106,7 +108,7 @@ class BrowseViewModel(
         val favorites: List<CatalogItem> = emptyList(),
         /** What was played most recently, for the Continue Watching row. */
         val continueWatching: List<WatchEntry> = emptyList(),
-        /** Disney, Netflix, Prime Video and Apple TV catalogues, keyed by CatalogCollection.key; absent until loaded. */
+        /** The collections' catalogues, keyed by CatalogCollection.key; absent until loaded. */
         val collections: Map<String, List<CollectionTitle>> = emptyMap(),
         val collectionErrors: Map<String, String> = emptyMap(),
         /** Each collection keeps its own sort; search and kind reset on leaving. */
@@ -283,7 +285,7 @@ class BrowseViewModel(
         }
     }
 
-    // ---- Disney / Netflix / Prime Video / Apple TV ----
+    // ---- Disney / Netflix / Prime Video / Apple TV / Hulu ----
 
     /**
      * A collection's whole catalogue. The home page shows its banner once it

@@ -167,6 +167,9 @@ class RedesignScreens {
     private val appleTv = (films.drop(2) + shows.drop(2)).shuffled(kotlin.random.Random(11)).map {
         CollectionTitle(it.id, it.type, it.title, it.year, it.poster)
     }
+    private val hulu = (films.drop(3) + shows).shuffled(kotlin.random.Random(13)).map {
+        CollectionTitle(it.id, it.type, it.title, it.year, it.poster)
+    }
 
     /** IPTV-style channel names, as a UK panel spells them. */
     private val sportsChannels = listOf(
@@ -240,7 +243,7 @@ class RedesignScreens {
         settle(1_500)
     }
 
-    private val menu = listOf("Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Apple", "Live", "Guide")
+    private val menu = listOf("Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Apple", "Hulu", "Live", "Guide")
     private fun focusOnMenu() = menu.any { focused(it) }
 
     @Suppress("UNCHECKED_CAST")
@@ -267,7 +270,7 @@ class RedesignScreens {
                 WatchEntry(kind = "tv", item = breakingBad, season = 2, episode = 5, nextSeason = 2, nextEpisode = 6),
                 WatchEntry(kind = "movie", item = films[4]),
             ),
-            collections = mapOf("disney" to disney, "netflix" to netflix, "prime" to prime, "appletv" to appleTv),
+            collections = mapOf("disney" to disney, "netflix" to netflix, "prime" to prime, "appletv" to appleTv, "hulu" to hulu),
             collectionErrors = emptyMap(),
         )
 
@@ -301,13 +304,16 @@ class RedesignScreens {
         key(Key.DirectionRight, 2)
         settle(2_000)
         snap("03b-home-banner-prime")
-        // The fifth banner: the row scrolls to bring it in.
+        // The fifth and sixth banners: the row scrolls to bring them in.
         key(Key.DirectionRight)
         settle(2_000)
         snap("03c-home-banner-appletv")
-        key(Key.DirectionLeft, 3)
+        key(Key.DirectionRight)
+        settle(2_000)
+        snap("03d-home-banner-hulu")
+        key(Key.DirectionLeft, 4)
         settle(1_000)
-        snap("03d-home-banner-back")
+        snap("03e-home-banner-back")
 
         key(Key.DirectionDown) // Continue watching
         key(Key.DirectionDown) // Top 10
@@ -341,6 +347,10 @@ class RedesignScreens {
         openSection("Apple")
         settle(5_000)
         snap("08c-appletv")
+
+        openSection("Hulu")
+        settle(5_000)
+        snap("08d-hulu")
 
         openSection("Guide")
         // The guide's own loading runs again on mount; re-seed what it overwrote.

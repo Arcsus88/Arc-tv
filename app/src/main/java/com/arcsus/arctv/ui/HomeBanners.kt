@@ -46,7 +46,7 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * One of Home's link banners (Disney, Sky Sports, Netflix, Prime Video, Apple TV), as on the web.
+ * One of Home's link banners (Disney, Sky Sports, Netflix, Prime Video, Apple TV, Hulu), as on the web.
  * [stops] and [center] describe the web banner's CSS backdrop, a
  * `radial-gradient(ellipse at …)`; [blurb] is what the details area above
  * the rows says while the banner is focused.
@@ -64,17 +64,19 @@ class HomeBanner(
     val onOpen: () -> Unit,
 )
 
-/** The web app's five banners, in its order: Disney, Sky Sports, Netflix, Prime Video, Apple TV. */
+/** The web app's six banners, in its order: Disney, Sky Sports, Netflix, Prime Video, Apple TV, Hulu. */
 fun homeBanners(
     disneyMeta: String?,
     netflixMeta: String?,
     primeMeta: String?,
     appleTvMeta: String?,
+    huluMeta: String?,
     onDisney: () -> Unit,
     onSkySports: () -> Unit,
     onNetflix: () -> Unit,
     onPrime: () -> Unit,
     onAppleTv: () -> Unit,
+    onHulu: () -> Unit,
 ): List<HomeBanner> = buildList {
     // The collections wait on their catalogues; Sky Sports is always there.
     if (disneyMeta != null) {
@@ -165,6 +167,24 @@ fun homeBanners(
             ),
         )
     }
+    if (huluMeta != null) {
+        add(
+            HomeBanner(
+                id = "hulu",
+                title = "Hulu",
+                kind = "COLLECTION",
+                blurb = "The films and series streaming on Hulu, which only runs in the US. Sources " +
+                    "are searched live, as for Movies and Shows.",
+                meta = huluMeta,
+                logo = R.drawable.logo_hulu,
+                logoHeight = 34.dp,
+                // radial-gradient(ellipse_at_center,#0b3d26_0%,#04170e_55%,#010503_100%)
+                stops = arrayOf(0f to Color(0xFF0B3D26), 0.55f to Color(0xFF04170E), 1f to Color(0xFF010503)),
+                center = Offset(0.5f, 0.5f),
+                onOpen = onHulu,
+            ),
+        )
+    }
 }
 
 /**
@@ -187,7 +207,7 @@ fun DrawScope.drawEllipseGradient(stops: Array<Pair<Float, Color>>, centerFracti
 
 /**
  * The web's banners in a row that scrolls, as on the web: four fit between
- * the screen's margins, each a quarter of that width, and the fifth peeks in
+ * the screen's margins, each a quarter of that width, and the next peeks in
  * at the edge. LEFT/RIGHT moves between them, the row scrolling only once
  * the focused banner would cross a margin; OK opens the focused one. While a
  * catalogue is still loading (or unreachable) the others keep their width,
