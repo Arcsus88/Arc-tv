@@ -28,8 +28,9 @@ Just Player, …).
   Hulu, which only runs in the US). Each collection has its own section with
   search, sort and (all but Disney) All / Films / Series.
 - **TV guide** — as on the web: pick your channel groups, then each channel
-  shows its logo over its Sky channel number, a still of what's on with a
-  progress bar, and now and next. Listings, numbers, logos and stills come
+  shows its logo over its Sky channel number, a still of what's on (or, with
+  no still, the channel's logo on a plain card) with a progress bar, and now
+  and next. Live channels in Continue Watching get the same logo card. Listings, numbers, logos and stills come
   from Sky's own EPG where Sky carries the channel, else the Xtream panel's.
 - **Code-based sign-in** — no typing credentials with the remote. Pick
   Real-Debrid or AllDebrid; the app shows a short code you authorise at

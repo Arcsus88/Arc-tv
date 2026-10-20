@@ -26,6 +26,7 @@ import com.arcsus.arctv.data.CatalogItem
 import com.arcsus.arctv.data.CatalogRow
 import com.arcsus.arctv.data.CollectionTitle
 import com.arcsus.arctv.data.LiveChannel
+import com.arcsus.arctv.data.SavedChannel
 import com.arcsus.arctv.data.SavedPlaylist
 import com.arcsus.arctv.data.SkyEpg
 import com.arcsus.arctv.data.WatchEntry
@@ -277,6 +278,12 @@ class RedesignScreens {
         // The guide: the playlist's sports group, dressed from Sky's real EPG.
         val sky = runBlocking { runCatching { SkyEpg.guide(sportsChannels) }.getOrDefault(emptyMap()) }
         println("redesign: Sky matched ${sky.size} of ${sportsChannels.size} channels")
+        // Live channels in Continue Watching: two with Sky's logos, one with
+        // no logo at all (its card shows the name).
+        val liveWatched = sportsChannels.mapNotNull { c -> sky[c.url]?.let { c to it.logo } }.take(2)
+            .map { (c, logo) -> WatchEntry(kind = "live", channel = SavedChannel(c.name, c.url, logo), group = c.group) } +
+            WatchEntry(kind = "live", channel = SavedChannel("UK| TNT SPORTS 2", "http://panel.example/live/u/p/1007.ts"), group = "UK| SPORTS")
+        browseState.value = browseState.value.copy(continueWatching = liveWatched + browseState.value.continueWatching)
         val guideState = stateOf<GuideViewModel.UiState>(guide)
         guideState.value = guideState.value.copy(
             playlist = PLAYLIST,
@@ -316,6 +323,8 @@ class RedesignScreens {
         snap("03e-home-banner-back")
 
         key(Key.DirectionDown) // Continue watching
+        settle(6_000) // channel logos
+        snap("03f-home-continue-live")
         key(Key.DirectionDown) // Top 10
         key(Key.DirectionRight)
         settle(12_000)
@@ -363,6 +372,12 @@ class RedesignScreens {
         key(Key.DirectionDown, 2)
         settle(1_500)
         snap("10-guide-focused")
+        // Channels with no programme still show their logo card instead.
+        guideState.value = guideState.value.copy(
+            sky = sky.mapValues { (_, c) -> c.copy(entries = c.entries.map { it.copy(image = "") }) },
+        )
+        settle(4_000)
+        snap("10b-guide-logo-cards")
 
         openSection("Movies")
         browseState.value = browseState.value.copy(discoverItems = films + shows.map { it.copy(type = "movie") }, discoverLoading = false, error = null)

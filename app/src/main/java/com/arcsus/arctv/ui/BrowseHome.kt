@@ -82,6 +82,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arcsus.arctv.data.CatalogItem
 import com.arcsus.arctv.data.CatalogRow
+import com.arcsus.arctv.data.SkyEpg
 import com.arcsus.arctv.data.TitleDetails
 import com.arcsus.arctv.data.WatchEntry
 import com.arcsus.arctv.ui.theme.ArcBackground
@@ -871,22 +872,7 @@ private fun ContinueTile(entry: WatchEntry, art: String?, viewModel: BrowseViewM
                     modifier = Modifier.fillMaxSize(),
                 )
             } else if (channel != null) {
-                Box(Modifier.fillMaxSize().stadiumBackdrop())
-                if (channel.logo.isNotBlank()) {
-                    AsyncImage(
-                        model = channel.logo,
-                        contentDescription = channel.name,
-                        modifier = Modifier.size(64.dp).align(Alignment.Center),
-                    )
-                } else {
-                    Text(
-                        channel.name.trim().firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "•",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                }
+                ChannelCard(logo = channel.logo, name = SkyEpg.withoutCountryPrefix(channel.name))
             }
             Box(
                 Modifier
