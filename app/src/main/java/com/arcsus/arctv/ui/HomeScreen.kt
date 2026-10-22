@@ -2,7 +2,9 @@ package com.arcsus.arctv.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
@@ -45,8 +48,17 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
@@ -55,6 +67,8 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.arcsus.arctv.ui.theme.ArcBackground
 import com.arcsus.arctv.ui.theme.ArcBlue
+import com.arcsus.arctv.ui.theme.ArcBorder
+import com.arcsus.arctv.ui.theme.ArcSurface
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -124,14 +138,28 @@ internal object Section {
     const val MOVIES = "Movies"
     const val DISNEY = "Disney"
     const val NETFLIX = "Netflix"
-    // "Prime", not "Prime Video": the menu has no room to spare (see NavLabel).
+    // "Prime", "Apple" and "Live", not "Prime Video", "Apple TV" and "Live
+    // TV", to keep the menu short (see TopNav). The banners and the
+    // sections' own headings keep the full names.
     const val PRIME = "Prime"
-    const val LIVE = "Live TV"
+    const val APPLE_TV = "Apple"
+    const val HULU = "Hulu"
+    const val LIVE = "Live"
     const val GUIDE = "Guide"
     const val DOWNLOADS = "Downloads"
     const val TORRENTS = "Torrents"
     const val SETTINGS = "Settings"
 }
+
+/**
+ * The sections behind the menu's "more" button, so the menu itself stays
+ * short: the streaming collections, which each have a banner on Home too,
+ * and Real-Debrid's Downloads and Torrents. The one you're in joins the
+ * menu, at its end, for as long as you're there.
+ */
+internal val MORE_SECTIONS = setOf(
+    Section.DISNEY, Section.NETFLIX, Section.PRIME, Section.APPLE_TV, Section.HULU, Section.DOWNLOADS, Section.TORRENTS,
+)
 
 /** The guide group the home page's Sky Sports banner opens (the web app's SKY_SPORTS_GROUP). */
 internal const val SKY_SPORTS_GROUP = "UK Sports"
@@ -156,7 +184,7 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         addAll(
             listOf(
                 Section.HOME, Section.SHOWS, Section.MOVIES, Section.DISNEY, Section.NETFLIX, Section.PRIME,
-                Section.LIVE, Section.GUIDE,
+                Section.APPLE_TV, Section.HULU, Section.LIVE, Section.GUIDE,
             ),
         )
         if (settingsState.rdConnected) addAll(listOf(Section.DOWNLOADS, Section.TORRENTS))
@@ -180,10 +208,17 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
             Section.DISNEY -> browseViewModel.setTab(BrowseTab.DISNEY)
             Section.NETFLIX -> browseViewModel.setTab(BrowseTab.NETFLIX)
             Section.PRIME -> browseViewModel.setTab(BrowseTab.PRIME)
+            Section.APPLE_TV -> browseViewModel.setTab(BrowseTab.APPLETV)
+            Section.HULU -> browseViewModel.setTab(BrowseTab.HULU)
         }
     }
     var navHasFocus by remember { mutableStateOf(false) }
     var contentHasFocus by remember { mutableStateOf(false) }
+    // The update banner sits between the menu and the content. Focus on its
+    // buttons is as real as focus in the content: without counting it, the
+    // recovery below took every landing on "Update now" for lost focus and
+    // pulled it back down into the screen.
+    var bannerHasFocus by remember { mutableStateOf(false) }
     var contentLostFocusAt by remember { mutableLongStateOf(0L) }
     val nav = remember { NavIntent() }
     val contentFocus = remember { FocusRequester() }
@@ -225,10 +260,25 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         }
     }
 
-    // Netflix: Back from anywhere in a section goes up to the menu; Back on
-    // the menu goes Home; Back on Home's menu leaves the app.
-    BackHandler(enabled = contentHasFocus || (navHasFocus && selectedName != Section.HOME)) {
-        if (contentHasFocus) {
+    // Focus left the content or the banner. If nothing took it at all
+    // (touch-mode devices; the banner's buttons going with "Later"), bring
+    // it back rather than leave the remote dead.
+    val onLeftContent: () -> Unit = {
+        contentLostFocusAt = System.nanoTime()
+        scope.launch {
+            delay(80)
+            if (!navHasFocus && !contentHasFocus && !bannerHasFocus) runCatching { contentFocus.requestFocus() }
+        }
+    }
+
+    // Netflix: Back from anywhere in a section (or the banner above it) goes
+    // up to the menu; Back on the menu goes Home; Back on Home's menu leaves
+    // the app.
+    BackHandler(enabled = contentHasFocus || bannerHasFocus || (navHasFocus && selectedName != Section.HOME)) {
+        if (contentHasFocus || bannerHasFocus) {
+            // Going up out of the section, as UP does -- otherwise the menu
+            // takes the arrival for stray focus and sends it straight back.
+            nav.record(Key.DirectionUp, navHadFocus = false, contentHadFocus = true)
             runCatching { navFocus[selectedName]?.requestFocus() }
         } else {
             proposed = null
@@ -237,8 +287,8 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
         }
     }
 
-    // A home banner asks for another section: Disney, Netflix, Prime Video,
-    // or the guide opened on the UK sports channels.
+    // A home banner asks for another section: one of the collections, or the
+    // guide opened on the UK sports channels.
     val openFromHome: (String) -> Unit = { name ->
         if (name == Section.GUIDE) guideViewModel.openGroup(SKY_SPORTS_GROUP)
         openSection(name)
@@ -250,8 +300,14 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
-                        Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight ->
-                            nav.record(event.key, navHasFocus, contentHasFocus)
+                        // UP from the banner is coming up out of the section.
+                        // OK counts too: focus that lands on the menu after
+                        // OK took away what was focused ("Later" removing the
+                        // banner) is the platform's doing, whatever arrow
+                        // came before it.
+                        Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight,
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter ->
+                            nav.record(event.key, navHasFocus, contentHasFocus || bannerHasFocus)
                     }
                 }
                 false
@@ -269,36 +325,34 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
                 .focusRequester(contentFocus)
                 .onFocusChanged { state ->
                     contentHasFocus = state.hasFocus
-                    if (!state.hasFocus) {
-                        contentLostFocusAt = System.nanoTime()
-                        // Nothing took focus at all (touch-mode devices):
-                        // bring it back rather than leave the remote dead.
-                        scope.launch {
-                            delay(80)
-                            if (!navHasFocus && !contentHasFocus) runCatching { contentFocus.requestFocus() }
-                        }
-                    }
+                    if (!state.hasFocus) onLeftContent()
                 }
-                // Only UP leaves the content, and only into the menu. A
-                // DPAD-down or sideways press that finds nothing focusable --
-                // a grid still reloading after picking a genre, say -- would
-                // otherwise let focus fall into the menu, and menu items
-                // switch section once focus rests on them.
+                // Of the D-pad, only UP leaves the content, and only into the
+                // menu. A DPAD-down or sideways press that finds nothing
+                // focusable -- a grid still reloading after picking a genre,
+                // say -- would otherwise let focus fall into the menu, and
+                // menu items switch section once focus rests on them. Focus
+                // the app asks for elsewhere (Back up to the menu) arrives as
+                // Enter, and must go through.
                 .focusProperties {
                     exit = { direction ->
-                        if (direction == FocusDirection.Up) FocusRequester.Default else FocusRequester.Cancel
+                        when (direction) {
+                            FocusDirection.Down, FocusDirection.Left, FocusDirection.Right -> FocusRequester.Cancel
+                            else -> FocusRequester.Default
+                        }
                     }
                 }
                 .focusGroup(),
         ) {
             when (selectedName) {
-                Section.HOME, Section.SHOWS, Section.MOVIES, Section.DISNEY, Section.NETFLIX, Section.PRIME ->
+                Section.HOME, Section.SHOWS, Section.MOVIES, Section.DISNEY, Section.NETFLIX, Section.PRIME,
+                Section.APPLE_TV, Section.HULU ->
                     BrowseScreen(
                         viewModel = browseViewModel,
                         searchOpen = searchOpen,
                         onSearchOpenChange = { searchOpen = it },
                         onOpenSection = openFromHome,
-                        canTakeFocus = { !navHasFocus },
+                        canTakeFocus = { !navHasFocus && !bannerHasFocus },
                     )
                 Section.LIVE -> LiveScreen(liveViewModel)
                 Section.GUIDE -> GuideScreen(guideViewModel)
@@ -319,12 +373,32 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
                     proposed = name
                     openSection(name)
                 },
+                onPick = { name ->
+                    // OK went to the "more" list's own window, past the key
+                    // listener above; the label it lands on is the viewer's
+                    // doing all the same.
+                    nav.record(Key.DirectionCenter, navHadFocus = true, contentHadFocus = false)
+                    proposed = name
+                    openSection(name)
+                    // The section's label joins the menu on the next frame.
+                    scope.launch { navFocus.getOrPut(name) { FocusRequester() }.requestFocusWhenReady() }
+                },
                 onSearch = {
                     openSection(Section.HOME)
                     searchOpen = true
                 },
             )
-            UpdateBanner(updateViewModel)
+            Box(
+                Modifier
+                    .onFocusChanged { state ->
+                        val had = bannerHasFocus
+                        bannerHasFocus = state.hasFocus
+                        if (had && !state.hasFocus) onLeftContent()
+                    }
+                    .focusGroup(),
+            ) {
+                UpdateBanner(updateViewModel)
+            }
         }
     }
 }
@@ -332,9 +406,10 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
 /**
  * Netflix's TV menu (2025 redesign): one row across the top of the screen,
  * always there. The brand and search on the left, the sections as plain
- * labels -- the one you're in white and bold, the rest dimmed -- and the
- * clock and settings on the right. Focus is Netflix's white pill with black
- * text. Coming up from the content lands on the section you're in.
+ * labels -- the one you're in white and bold, the rest dimmed -- then the
+ * "more" button for the rest ([MORE_SECTIONS]), and the clock and settings
+ * on the right. Focus is Netflix's white pill with black text. Coming up
+ * from the content lands on the section you're in.
  */
 @Composable
 private fun TopNav(
@@ -344,6 +419,7 @@ private fun TopNav(
     onFocusChanged: (Boolean) -> Unit,
     onFocused: (String) -> Unit,
     onActivate: (String) -> Unit,
+    onPick: (String) -> Unit,
     onSearch: () -> Unit,
 ) {
     val time by produceState(initialValue = clockNow()) {
@@ -386,15 +462,44 @@ private fun TopNav(
             modifier = Modifier.onFocusChanged { if (it.isFocused) onFocused("Search") },
         )
         Spacer(Modifier.width(6.dp))
-        sections.filter { it != Section.SETTINGS }.forEach { name ->
+        val more = sections.filter { it in MORE_SECTIONS }
+        // The everyday sections, then the one you're in if it lives under "more".
+        val labels = sections.filter { it != Section.SETTINGS && it !in MORE_SECTIONS } +
+            listOfNotNull(selected.takeIf { it in more })
+        labels.forEach { name ->
             NavLabel(
                 label = name,
                 selected = name == selected,
+                padding = 10.dp,
                 onClick = { onActivate(name) },
                 modifier = Modifier
                     .focusRequester(requesterFor(name))
                     .onFocusChanged { if (it.isFocused) onFocused(name) },
             )
+        }
+        Spacer(Modifier.width(2.dp))
+        var moreOpen by remember { mutableStateOf(false) }
+        Box {
+            NavIcon(
+                Icons.Default.MoreHoriz,
+                "More",
+                selected = false,
+                onClick = { moreOpen = true },
+                open = moreOpen,
+                // Not a section: resting here opens nothing.
+                modifier = Modifier.onFocusChanged { if (it.isFocused) onFocused("More") },
+            )
+            if (moreOpen) {
+                MoreMenu(
+                    sections = more,
+                    selected = selected,
+                    onPick = { name ->
+                        moreOpen = false
+                        onPick(name)
+                    },
+                    onDismiss = { moreOpen = false },
+                )
+            }
         }
         Spacer(Modifier.weight(1f))
         Text(
@@ -418,7 +523,13 @@ private fun TopNav(
 }
 
 @Composable
-private fun NavLabel(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun NavLabel(
+    label: String,
+    selected: Boolean,
+    padding: Dp,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val shape = RoundedCornerShape(50)
     Surface(
         onClick = onClick,
@@ -434,17 +545,82 @@ private fun NavLabel(label: String, selected: Boolean, onClick: () -> Unit, modi
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
         modifier = modifier,
     ) {
-        // Snug: with Downloads and Torrents (Real-Debrid) the menu has ten
-        // labels to fit across a 960dp-wide TV and still leave the clock and
-        // settings their room.
+        // [padding]: the menu's labels sit closer together than the "more" list's.
         Text(
             label,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             maxLines = 1,
             softWrap = false,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = padding, vertical = 6.dp),
         )
+    }
+}
+
+/**
+ * The "more" list, dropped from its button: the sections that don't fit on
+ * the menu, as the menu's own labels stacked in a panel, opening on the one
+ * you're in. It is a focusable popup, so the remote stays inside it: OK
+ * opens a section, Back closes it.
+ */
+@Composable
+private fun MoreMenu(
+    sections: List<String>,
+    selected: String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val density = LocalDensity.current
+    val position = remember(density) {
+        with(density) { DropBelow(gap = 4.dp.roundToPx(), margin = TV_INSET_H.roundToPx()) }
+    }
+    Popup(
+        popupPositionProvider = position,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        val start = remember { FocusRequester() }
+        val startAt = sections.indexOf(selected).coerceAtLeast(0)
+        LaunchedEffect(Unit) { start.requestFocusWhenReady() }
+        val panel = RoundedCornerShape(16.dp)
+        Column(
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier
+                .width(184.dp)
+                .background(ArcSurface, panel)
+                .border(1.dp, ArcBorder, panel)
+                .padding(6.dp)
+                .focusGroup(),
+        ) {
+            sections.forEachIndexed { i, name ->
+                // Real-Debrid's own sections after a hairline.
+                if (name == Section.DOWNLOADS && i > 0) {
+                    Box(Modifier.padding(horizontal = 10.dp, vertical = 4.dp).fillMaxWidth().height(1.dp).background(ArcBorder))
+                }
+                NavLabel(
+                    label = name,
+                    selected = name == selected,
+                    padding = 14.dp,
+                    onClick = { onPick(name) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (i == startAt) Modifier.focusRequester(start) else Modifier),
+                )
+            }
+        }
+    }
+}
+
+/** Below the anchor, level with its left edge, and kept [margin] inside the window. */
+private class DropBelow(private val gap: Int, private val margin: Int) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val maxX = (windowSize.width - margin - popupContentSize.width).coerceAtLeast(margin)
+        return IntOffset(anchorBounds.left.coerceIn(margin, maxX), anchorBounds.bottom + gap)
     }
 }
 
@@ -455,16 +631,19 @@ private fun NavIcon(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    open: Boolean = false,
 ) {
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) Color.White.copy(alpha = 0.15f) else Color.Transparent,
-            focusedContainerColor = Color.White,
+            // [open]: its list is showing and has the remote, though focus
+            // here is kept for when it closes. One white pill on screen.
+            focusedContainerColor = if (open) Color.White.copy(alpha = 0.15f) else Color.White,
             pressedContainerColor = Color.White.copy(alpha = 0.85f),
             contentColor = if (selected) Color.White else Color.White.copy(alpha = 0.75f),
-            focusedContentColor = Color.Black,
+            focusedContentColor = if (open) Color.White else Color.Black,
             pressedContentColor = Color.Black,
         ),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),

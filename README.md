@@ -8,23 +8,32 @@ Just Player, …).
 ## Features
 
 - **Netflix-style TV interface** — the menu runs across the top (Netflix's
-  2025 TV layout), Home opens on a billboard with Play / More info / My List,
+  2025 TV layout) and keeps to Home, Shows, Movies, Live and Guide; Disney,
+  Netflix, Prime Video, Apple TV, Hulu (and, with Real-Debrid, Downloads and
+  Torrents) are in the list under its ⋯ button, and whichever of those you're
+  in joins the menu while you're there. Home opens on a billboard with Play / More info / My List,
   and a details area at the top describes whatever has focus while the rows
   scroll beneath it, the focused row and tile always in the same place. A
   Top 10 row with outlined rank numerals, Continue Watching and My List
   (hearted titles). Back takes you up to the menu, and from there Home.
+  Movies and Shows each have a search box beside their genre and sort
+  pills; the magnifier in the menu searches films and shows together.
   Styled with the web app's dark theme: near-black ground,
   hairline borders, the Arc blue accent, Netflix's white focus.
-- **Disney, Sky Sports, Netflix and Prime Video banners** — the web app's
-  home banners, side by side: LEFT/RIGHT moves between them, OK opens Disney
-  (every Disney and Pixar feature, pre-searched so Play starts at once), the
-  guide on the UK sports channels, Netflix (the films and series on Netflix
-  UK) or Prime Video (the films and series included with Prime Video UK).
-  Each collection has its own section with search, sort and (Netflix, Prime
-  Video) All / Films / Series.
+- **Disney, Sky Sports, Netflix, Prime Video, Apple TV and Hulu banners** —
+  the web app's home banners, in a row that scrolls: four fit across the
+  screen and the next peeks in at the edge. LEFT/RIGHT moves between them
+  (the row slides along once you reach the edge), OK opens Disney (every
+  Disney and Pixar feature, pre-searched so Play starts at once), the guide
+  on the UK sports channels, Netflix (the films and series on Netflix UK),
+  Prime Video (the films and series included with Prime Video UK), Apple TV
+  (the films and series on Apple TV UK) or Hulu (the films and series on
+  Hulu, which only runs in the US). Each collection has its own section with
+  search, sort and (all but Disney) All / Films / Series.
 - **TV guide** — as on the web: pick your channel groups, then each channel
-  shows its logo over its Sky channel number, a still of what's on with a
-  progress bar, and now and next. Listings, numbers, logos and stills come
+  shows its logo over its Sky channel number, a still of what's on (or, with
+  no still, the channel's logo on a plain card) with a progress bar, and now
+  and next. Live channels in Continue Watching get the same logo card. Listings, numbers, logos and stills come
   from Sky's own EPG where Sky carries the channel, else the Xtream panel's.
 - **Code-based sign-in** — no typing credentials with the remote. Pick
   Real-Debrid or AllDebrid; the app shows a short code you authorise at

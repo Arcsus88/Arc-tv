@@ -484,7 +484,7 @@ private fun GuideRow(
             }
             Spacer(Modifier.width(14.dp))
 
-            // What's on: still (or the stadium tile), play button, progress.
+            // What's on: its still (else the channel's card), play button, progress.
             Box(
                 Modifier
                     .width(STILL_WIDTH)
@@ -494,9 +494,15 @@ private fun GuideRow(
                     .background(MaterialTheme.colorScheme.surface)
                     .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(7.dp)),
             ) {
-                // The stadium tile stands in until (and unless) the still arrives.
-                Box(Modifier.fillMaxSize().stadiumBackdrop())
-                if (still != null) {
+                // The channel's logo card stands in until (and unless) the
+                // still arrives; its name only once no logo is on the way.
+                if (still == null) {
+                    ChannelCard(
+                        logo = logo.orEmpty(),
+                        name = if (pending) "" else name,
+                        logoAlpha = if (focused) 0.35f else 1f,
+                    )
+                } else {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current).data(still).crossfade(200).build(),
                         contentDescription = null,
@@ -505,15 +511,19 @@ private fun GuideRow(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(38.dp)
-                        .background(if (focused) ArcBlue.copy(alpha = 0.85f) else Color.Black.copy(alpha = 0.35f), CircleShape)
-                        .border(2.dp, Color.White.copy(alpha = 0.9f), CircleShape),
-                ) {
-                    Text("▶", color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(start = 2.dp))
+                // Over a still, always; over the logo card, only on focus, so
+                // the logo has the card to itself until then.
+                if (still != null || focused) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(38.dp)
+                            .background(if (focused) ArcBlue.copy(alpha = 0.85f) else Color.Black.copy(alpha = 0.35f), CircleShape)
+                            .border(2.dp, Color.White.copy(alpha = 0.9f), CircleShape),
+                    ) {
+                        Text("▶", color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(start = 2.dp))
+                    }
                 }
                 if (now != null) {
                     Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(3.dp).background(Color.Black.copy(alpha = 0.55f))) {

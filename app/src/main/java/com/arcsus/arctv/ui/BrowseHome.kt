@@ -82,6 +82,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.arcsus.arctv.data.CatalogItem
 import com.arcsus.arctv.data.CatalogRow
+import com.arcsus.arctv.data.SkyEpg
 import com.arcsus.arctv.data.TitleDetails
 import com.arcsus.arctv.data.WatchEntry
 import com.arcsus.arctv.ui.theme.ArcBackground
@@ -170,19 +171,29 @@ internal fun NetflixHome(
     val primeMeta = state.collections[CatalogCollection.PRIME.key]?.let { titles ->
         "${titles.count { !it.item.isTv }} films · ${titles.count { it.item.isTv }} series"
     }
+    val appleTvMeta = state.collections[CatalogCollection.APPLETV.key]?.let { titles ->
+        "${titles.count { !it.item.isTv }} films · ${titles.count { it.item.isTv }} series"
+    }
+    val huluMeta = state.collections[CatalogCollection.HULU.key]?.let { titles ->
+        "${titles.count { !it.item.isTv }} films · ${titles.count { it.item.isTv }} series"
+    }
     val openSection by rememberUpdatedState(onOpenSection)
     // Remembered: the banners (and the spotlight holding one) must stay the
     // same objects across recompositions, or reporting the one in view
     // recomposes, rebuilds them, and reports again, forever.
-    val banners = remember(disneyMeta, netflixMeta, primeMeta) {
+    val banners = remember(disneyMeta, netflixMeta, primeMeta, appleTvMeta, huluMeta) {
         homeBanners(
             disneyMeta = disneyMeta,
             netflixMeta = netflixMeta,
             primeMeta = primeMeta,
+            appleTvMeta = appleTvMeta,
+            huluMeta = huluMeta,
             onDisney = { openSection(Section.DISNEY) },
             onSkySports = { openSection(Section.GUIDE) },
             onNetflix = { openSection(Section.NETFLIX) },
             onPrime = { openSection(Section.PRIME) },
+            onAppleTv = { openSection(Section.APPLE_TV) },
+            onHulu = { openSection(Section.HULU) },
         )
     }
 
@@ -228,8 +239,11 @@ internal fun NetflixHome(
                                 HomeBannerRow(
                                     banners = banners,
                                     onShowing = { spotlight = Spotlight.Banner(it) },
+                                    // The row runs edge to edge, so banners scroll
+                                    // out under the screen's margins; it keeps
+                                    // its tiles inside them itself.
                                     modifier = Modifier
-                                        .padding(horizontal = TV_INSET_H, vertical = 8.dp)
+                                        .padding(vertical = 8.dp)
                                         // UP goes back to the billboard's Play, as on Netflix.
                                         .focusProperties { up = playFocus },
                                 )
@@ -858,22 +872,7 @@ private fun ContinueTile(entry: WatchEntry, art: String?, viewModel: BrowseViewM
                     modifier = Modifier.fillMaxSize(),
                 )
             } else if (channel != null) {
-                Box(Modifier.fillMaxSize().stadiumBackdrop())
-                if (channel.logo.isNotBlank()) {
-                    AsyncImage(
-                        model = channel.logo,
-                        contentDescription = channel.name,
-                        modifier = Modifier.size(64.dp).align(Alignment.Center),
-                    )
-                } else {
-                    Text(
-                        channel.name.trim().firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "•",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                }
+                ChannelCard(logo = channel.logo, name = SkyEpg.withoutCountryPrefix(channel.name))
             }
             Box(
                 Modifier

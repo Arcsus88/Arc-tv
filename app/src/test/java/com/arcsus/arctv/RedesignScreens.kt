@@ -10,9 +10,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
@@ -26,6 +29,7 @@ import com.arcsus.arctv.data.CatalogItem
 import com.arcsus.arctv.data.CatalogRow
 import com.arcsus.arctv.data.CollectionTitle
 import com.arcsus.arctv.data.LiveChannel
+import com.arcsus.arctv.data.SavedChannel
 import com.arcsus.arctv.data.SavedPlaylist
 import com.arcsus.arctv.data.SkyEpg
 import com.arcsus.arctv.data.WatchEntry
@@ -34,6 +38,7 @@ import com.arcsus.arctv.ui.BrowseViewModel
 import com.arcsus.arctv.ui.GuideGroup
 import com.arcsus.arctv.ui.GuideViewModel
 import com.arcsus.arctv.ui.HomeScreen
+import com.arcsus.arctv.ui.SettingsViewModel
 import com.arcsus.arctv.ui.theme.ArcBackground
 import com.arcsus.arctv.ui.theme.ArcTvTheme
 import com.github.takahirom.roborazzi.captureScreenRoboImage
@@ -163,6 +168,12 @@ class RedesignScreens {
     private val prime = (films.drop(1) + shows).shuffled(kotlin.random.Random(9)).map {
         CollectionTitle(it.id, it.type, it.title, it.year, it.poster)
     }
+    private val appleTv = (films.drop(2) + shows.drop(2)).shuffled(kotlin.random.Random(11)).map {
+        CollectionTitle(it.id, it.type, it.title, it.year, it.poster)
+    }
+    private val hulu = (films.drop(3) + shows).shuffled(kotlin.random.Random(13)).map {
+        CollectionTitle(it.id, it.type, it.title, it.year, it.poster)
+    }
 
     /** IPTV-style channel names, as a UK panel spells them. */
     private val sportsChannels = listOf(
@@ -226,18 +237,37 @@ class RedesignScreens {
         rule.onAllNodes(isFocused() and (hasText(text) or hasAnyDescendant(hasText(text))))
             .fetchSemanticsNodes().isNotEmpty()
 
-    /** UP into the menu, then along it to [label], then OK. */
+    /** The menu's "more" button: an icon, named by its description. */
+    private fun onMore(): Boolean =
+        rule.onAllNodes(isFocused() and hasContentDescription("More")).fetchSemanticsNodes().isNotEmpty()
+
+    /** To the "more" list, a popup with its own root, while it's open. */
+    private fun popupKey(k: Key) {
+        rule.onAllNodes(isRoot()).onLast().performKeyInput { pressKey(k) }
+        settle(150)
+    }
+
+    /** UP into the menu, then along it to [label] (or to "more" and down its list), then OK. */
     private fun openSection(label: String) {
         repeat(12) { if (!focusOnMenu()) key(Key.DirectionUp) }
-        repeat(12) { if (!focused(label)) key(Key.DirectionLeft) }
-        repeat(12) { if (!focused(label)) key(Key.DirectionRight) }
+        if (label in more) {
+            repeat(12) { if (!onMore()) key(Key.DirectionLeft) }
+            repeat(12) { if (!onMore()) key(Key.DirectionRight) }
+            key(Key.DirectionCenter)
+            repeat(8) { if (!focused(label)) popupKey(Key.DirectionDown) }
+            repeat(8) { if (!focused(label)) popupKey(Key.DirectionUp) }
+        } else {
+            repeat(12) { if (!focused(label)) key(Key.DirectionLeft) }
+            repeat(12) { if (!focused(label)) key(Key.DirectionRight) }
+        }
         println("redesign: menu '$label' reached=${focused(label)}")
-        key(Key.DirectionCenter)
+        if (label in more) popupKey(Key.DirectionCenter) else key(Key.DirectionCenter)
         settle(1_500)
     }
 
-    private val menu = listOf("Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Live TV", "Guide")
-    private fun focusOnMenu() = menu.any { focused(it) }
+    private val menu = listOf("Home", "Shows", "Movies", "Live", "Guide")
+    private val more = listOf("Disney", "Netflix", "Prime", "Apple", "Hulu")
+    private fun focusOnMenu() = (menu + more).any { focused(it) } || onMore()
 
     @Suppress("UNCHECKED_CAST")
     private fun <S> stateOf(vm: ViewModel, field: String = "_state"): MutableStateFlow<S> =
@@ -263,13 +293,19 @@ class RedesignScreens {
                 WatchEntry(kind = "tv", item = breakingBad, season = 2, episode = 5, nextSeason = 2, nextEpisode = 6),
                 WatchEntry(kind = "movie", item = films[4]),
             ),
-            collections = mapOf("disney" to disney, "netflix" to netflix, "prime" to prime),
+            collections = mapOf("disney" to disney, "netflix" to netflix, "prime" to prime, "appletv" to appleTv, "hulu" to hulu),
             collectionErrors = emptyMap(),
         )
 
         // The guide: the playlist's sports group, dressed from Sky's real EPG.
         val sky = runBlocking { runCatching { SkyEpg.guide(sportsChannels) }.getOrDefault(emptyMap()) }
         println("redesign: Sky matched ${sky.size} of ${sportsChannels.size} channels")
+        // Live channels in Continue Watching: two with Sky's logos, one with
+        // no logo at all (its card shows the name).
+        val liveWatched = sportsChannels.mapNotNull { c -> sky[c.url]?.let { c to it.logo } }.take(2)
+            .map { (c, logo) -> WatchEntry(kind = "live", channel = SavedChannel(c.name, c.url, logo), group = c.group) } +
+            WatchEntry(kind = "live", channel = SavedChannel("UK| TNT SPORTS 2", "http://panel.example/live/u/p/1007.ts"), group = "UK| SPORTS")
+        browseState.value = browseState.value.copy(continueWatching = liveWatched + browseState.value.continueWatching)
         val guideState = stateOf<GuideViewModel.UiState>(guide)
         guideState.value = guideState.value.copy(
             playlist = PLAYLIST,
@@ -297,9 +333,20 @@ class RedesignScreens {
         key(Key.DirectionRight, 2)
         settle(2_000)
         snap("03b-home-banner-prime")
-        key(Key.DirectionLeft, 2)
+        // The fifth and sixth banners: the row scrolls to bring them in.
+        key(Key.DirectionRight)
+        settle(2_000)
+        snap("03c-home-banner-appletv")
+        key(Key.DirectionRight)
+        settle(2_000)
+        snap("03d-home-banner-hulu")
+        key(Key.DirectionLeft, 4)
+        settle(1_000)
+        snap("03e-home-banner-back")
 
         key(Key.DirectionDown) // Continue watching
+        settle(6_000) // channel logos
+        snap("03f-home-continue-live")
         key(Key.DirectionDown) // Top 10
         key(Key.DirectionRight)
         settle(12_000)
@@ -328,6 +375,14 @@ class RedesignScreens {
         settle(5_000)
         snap("08b-prime")
 
+        openSection("Apple")
+        settle(5_000)
+        snap("08c-appletv")
+
+        openSection("Hulu")
+        settle(5_000)
+        snap("08d-hulu")
+
         openSection("Guide")
         // The guide's own loading runs again on mount; re-seed what it overwrote.
         guideState.value = guideState.value.copy(
@@ -339,15 +394,43 @@ class RedesignScreens {
         key(Key.DirectionDown, 2)
         settle(1_500)
         snap("10-guide-focused")
+        // Channels with no programme still show their logo card instead.
+        guideState.value = guideState.value.copy(
+            sky = sky.mapValues { (_, c) -> c.copy(entries = c.entries.map { it.copy(image = "") }) },
+        )
+        settle(4_000)
+        snap("10b-guide-logo-cards")
 
         openSection("Movies")
         browseState.value = browseState.value.copy(discoverItems = films + shows.map { it.copy(type = "movie") }, discoverLoading = false, error = null)
         settle(5_000)
         snap("11-movies")
 
+        // Movies' own search: its matches in the grid's place (the show is left out).
+        browseState.value = browseState.value.copy(
+            query = "dune", searchResults = listOf(dune, breakingBad, spiderVerse), searching = false, error = null,
+        )
+        settle(5_000)
+        snap("11b-movies-search")
+
         openSection("Home")
         settle(3_000)
         snap("12-home-menu")
+
+        // With Real-Debrid connected, Downloads and Torrents join the
+        // collections under "more": the menu itself stays as it was.
+        val settings = provider[SettingsViewModel::class.java]
+        val settingsState = stateOf<SettingsViewModel.UiState>(settings)
+        settingsState.value = settingsState.value.copy(rdConnected = true)
+        settle(2_000)
+        snap("13-menu-real-debrid")
+        key(Key.DirectionRight, 5)
+        println("redesign: menu 'More' reached=${onMore()}")
+        key(Key.DirectionCenter)
+        // One step down: the list's first frame can draw its focus late here.
+        popupKey(Key.DirectionDown)
+        settle(1_500)
+        snapScreen("14-menu-more")
     }
 
     private companion object {
