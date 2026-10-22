@@ -8,7 +8,10 @@ Just Player, …).
 ## Features
 
 - **Netflix-style TV interface** — the menu runs across the top (Netflix's
-  2025 TV layout), Home opens on a billboard with Play / More info / My List,
+  2025 TV layout) and keeps to Home, Shows, Movies, Live and Guide; Disney,
+  Netflix, Prime Video, Apple TV, Hulu (and, with Real-Debrid, Downloads and
+  Torrents) are in the list under its ⋯ button, and whichever of those you're
+  in joins the menu while you're there. Home opens on a billboard with Play / More info / My List,
   and a details area at the top describes whatever has focus while the rows
   scroll beneath it, the focused row and tile always in the same place. A
   Top 10 row with outlined rank numerals, Continue Watching and My List

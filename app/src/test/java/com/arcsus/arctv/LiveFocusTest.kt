@@ -156,9 +156,7 @@ class LiveFocusTest {
      * (Focus put on the menu any other way is, by design, treated as the
      * platform's doing and sent back into the content.)
      */
-    private val menuTitles = listOf(
-        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Apple", "Hulu", "Live", "Guide", "Settings",
-    )
+    private val menuTitles = listOf("Search", "Home", "Shows", "Movies", "Live", "Guide", "More", "Settings")
 
     private fun menuTo(title: String) {
         repeat(12) { if (menuTitles.none { isFocused(it) }) key(Key.DirectionUp) }

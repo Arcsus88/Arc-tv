@@ -161,10 +161,7 @@ class DesignLoopScreens {
      * Focus placed on the menu any other way is treated as the platform's
      * doing and sent back into the content, so a plain requestFocus won't do.
      */
-    private val menuTitles = listOf(
-        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Apple", "Hulu", "Live", "Guide", "Downloads",
-        "Torrents", "Settings",
-    )
+    private val menuTitles = listOf("Search", "Home", "Shows", "Movies", "Live", "Guide", "More", "Settings")
 
     private fun onMenu(): Boolean = menuTitles.any { isFocused(it) }
 

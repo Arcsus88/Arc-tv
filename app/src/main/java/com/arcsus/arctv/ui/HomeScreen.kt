@@ -2,7 +2,9 @@ package com.arcsus.arctv.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
@@ -45,9 +48,17 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
@@ -56,6 +67,8 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.arcsus.arctv.ui.theme.ArcBackground
 import com.arcsus.arctv.ui.theme.ArcBlue
+import com.arcsus.arctv.ui.theme.ArcBorder
+import com.arcsus.arctv.ui.theme.ArcSurface
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -126,7 +139,7 @@ internal object Section {
     const val DISNEY = "Disney"
     const val NETFLIX = "Netflix"
     // "Prime", "Apple" and "Live", not "Prime Video", "Apple TV" and "Live
-    // TV": the menu has no room to spare (see TopNav). The banners and the
+    // TV", to keep the menu short (see TopNav). The banners and the
     // sections' own headings keep the full names.
     const val PRIME = "Prime"
     const val APPLE_TV = "Apple"
@@ -137,6 +150,16 @@ internal object Section {
     const val TORRENTS = "Torrents"
     const val SETTINGS = "Settings"
 }
+
+/**
+ * The sections behind the menu's "more" button, so the menu itself stays
+ * short: the streaming collections, which each have a banner on Home too,
+ * and Real-Debrid's Downloads and Torrents. The one you're in joins the
+ * menu, at its end, for as long as you're there.
+ */
+internal val MORE_SECTIONS = setOf(
+    Section.DISNEY, Section.NETFLIX, Section.PRIME, Section.APPLE_TV, Section.HULU, Section.DOWNLOADS, Section.TORRENTS,
+)
 
 /** The guide group the home page's Sky Sports banner opens (the web app's SKY_SPORTS_GROUP). */
 internal const val SKY_SPORTS_GROUP = "UK Sports"
@@ -350,6 +373,16 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
                     proposed = name
                     openSection(name)
                 },
+                onPick = { name ->
+                    // OK went to the "more" list's own window, past the key
+                    // listener above; the label it lands on is the viewer's
+                    // doing all the same.
+                    nav.record(Key.DirectionCenter, navHadFocus = true, contentHadFocus = false)
+                    proposed = name
+                    openSection(name)
+                    // The section's label joins the menu on the next frame.
+                    scope.launch { navFocus.getOrPut(name) { FocusRequester() }.requestFocusWhenReady() }
+                },
                 onSearch = {
                     openSection(Section.HOME)
                     searchOpen = true
@@ -373,9 +406,10 @@ fun HomeScreen(factory: ArcTvViewModelFactory) {
 /**
  * Netflix's TV menu (2025 redesign): one row across the top of the screen,
  * always there. The brand and search on the left, the sections as plain
- * labels -- the one you're in white and bold, the rest dimmed -- and the
- * clock and settings on the right. Focus is Netflix's white pill with black
- * text. Coming up from the content lands on the section you're in.
+ * labels -- the one you're in white and bold, the rest dimmed -- then the
+ * "more" button for the rest ([MORE_SECTIONS]), and the clock and settings
+ * on the right. Focus is Netflix's white pill with black text. Coming up
+ * from the content lands on the section you're in.
  */
 @Composable
 private fun TopNav(
@@ -385,6 +419,7 @@ private fun TopNav(
     onFocusChanged: (Boolean) -> Unit,
     onFocused: (String) -> Unit,
     onActivate: (String) -> Unit,
+    onPick: (String) -> Unit,
     onSearch: () -> Unit,
 ) {
     val time by produceState(initialValue = clockNow()) {
@@ -427,21 +462,44 @@ private fun TopNav(
             modifier = Modifier.onFocusChanged { if (it.isFocused) onFocused("Search") },
         )
         Spacer(Modifier.width(6.dp))
-        val labels = sections.filter { it != Section.SETTINGS }
-        // With Downloads and Torrents (Real-Debrid) there are twelve labels,
-        // which only leave the clock and settings their room on a 960dp-wide
-        // TV packed tighter; the usual ten keep the roomier spacing.
-        val labelPadding = if (labels.size > 10) 4.dp else 6.dp
+        val more = sections.filter { it in MORE_SECTIONS }
+        // The everyday sections, then the one you're in if it lives under "more".
+        val labels = sections.filter { it != Section.SETTINGS && it !in MORE_SECTIONS } +
+            listOfNotNull(selected.takeIf { it in more })
         labels.forEach { name ->
             NavLabel(
                 label = name,
                 selected = name == selected,
-                padding = labelPadding,
+                padding = 10.dp,
                 onClick = { onActivate(name) },
                 modifier = Modifier
                     .focusRequester(requesterFor(name))
                     .onFocusChanged { if (it.isFocused) onFocused(name) },
             )
+        }
+        Spacer(Modifier.width(2.dp))
+        var moreOpen by remember { mutableStateOf(false) }
+        Box {
+            NavIcon(
+                Icons.Default.MoreHoriz,
+                "More",
+                selected = false,
+                onClick = { moreOpen = true },
+                open = moreOpen,
+                // Not a section: resting here opens nothing.
+                modifier = Modifier.onFocusChanged { if (it.isFocused) onFocused("More") },
+            )
+            if (moreOpen) {
+                MoreMenu(
+                    sections = more,
+                    selected = selected,
+                    onPick = { name ->
+                        moreOpen = false
+                        onPick(name)
+                    },
+                    onDismiss = { moreOpen = false },
+                )
+            }
         }
         Spacer(Modifier.weight(1f))
         Text(
@@ -487,7 +545,7 @@ private fun NavLabel(
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
         modifier = modifier,
     ) {
-        // Snug: [padding] is as little as the menu's crowding needs (see TopNav).
+        // [padding]: the menu's labels sit closer together than the "more" list's.
         Text(
             label,
             style = MaterialTheme.typography.titleSmall,
@@ -499,6 +557,73 @@ private fun NavLabel(
     }
 }
 
+/**
+ * The "more" list, dropped from its button: the sections that don't fit on
+ * the menu, as the menu's own labels stacked in a panel, opening on the one
+ * you're in. It is a focusable popup, so the remote stays inside it: OK
+ * opens a section, Back closes it.
+ */
+@Composable
+private fun MoreMenu(
+    sections: List<String>,
+    selected: String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val density = LocalDensity.current
+    val position = remember(density) {
+        with(density) { DropBelow(gap = 4.dp.roundToPx(), margin = TV_INSET_H.roundToPx()) }
+    }
+    Popup(
+        popupPositionProvider = position,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        val start = remember { FocusRequester() }
+        val startAt = sections.indexOf(selected).coerceAtLeast(0)
+        LaunchedEffect(Unit) { start.requestFocusWhenReady() }
+        val panel = RoundedCornerShape(16.dp)
+        Column(
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier
+                .width(184.dp)
+                .background(ArcSurface, panel)
+                .border(1.dp, ArcBorder, panel)
+                .padding(6.dp)
+                .focusGroup(),
+        ) {
+            sections.forEachIndexed { i, name ->
+                // Real-Debrid's own sections after a hairline.
+                if (name == Section.DOWNLOADS && i > 0) {
+                    Box(Modifier.padding(horizontal = 10.dp, vertical = 4.dp).fillMaxWidth().height(1.dp).background(ArcBorder))
+                }
+                NavLabel(
+                    label = name,
+                    selected = name == selected,
+                    padding = 14.dp,
+                    onClick = { onPick(name) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (i == startAt) Modifier.focusRequester(start) else Modifier),
+                )
+            }
+        }
+    }
+}
+
+/** Below the anchor, level with its left edge, and kept [margin] inside the window. */
+private class DropBelow(private val gap: Int, private val margin: Int) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val maxX = (windowSize.width - margin - popupContentSize.width).coerceAtLeast(margin)
+        return IntOffset(anchorBounds.left.coerceIn(margin, maxX), anchorBounds.bottom + gap)
+    }
+}
+
 @Composable
 private fun NavIcon(
     icon: ImageVector,
@@ -506,16 +631,19 @@ private fun NavIcon(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    open: Boolean = false,
 ) {
     Surface(
         onClick = onClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (selected) Color.White.copy(alpha = 0.15f) else Color.Transparent,
-            focusedContainerColor = Color.White,
+            // [open]: its list is showing and has the remote, though focus
+            // here is kept for when it closes. One white pill on screen.
+            focusedContainerColor = if (open) Color.White.copy(alpha = 0.15f) else Color.White,
             pressedContainerColor = Color.White.copy(alpha = 0.85f),
             contentColor = if (selected) Color.White else Color.White.copy(alpha = 0.75f),
-            focusedContentColor = Color.Black,
+            focusedContentColor = if (open) Color.White else Color.Black,
             pressedContentColor = Color.Black,
         ),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),

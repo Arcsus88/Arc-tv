@@ -3,12 +3,15 @@ package com.arcsus.arctv
 import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
@@ -16,11 +19,14 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.arcsus.arctv.ui.ArcTvViewModelFactory
+import com.arcsus.arctv.ui.BrowseTab
+import com.arcsus.arctv.ui.BrowseViewModel
 import com.arcsus.arctv.ui.HomeScreen
 import com.arcsus.arctv.ui.UpdateViewModel
 import com.arcsus.arctv.ui.theme.ArcTvTheme
 import com.arcsus.arctv.update.UpdateInfo
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -81,9 +87,7 @@ class MenuFocusTest {
 
     private fun onBanner() = isFocused("Update now") || isFocused("Later")
 
-    private val menuTitles = listOf(
-        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Apple", "Hulu", "Live", "Guide", "Settings",
-    )
+    private val menuTitles = listOf("Search", "Home", "Shows", "Movies", "Live", "Guide", "More", "Settings")
 
     private fun onMenu() = menuTitles.any { isFocused(it) }
 
@@ -173,6 +177,104 @@ class MenuFocusTest {
         settle(1_000)
         assertTrue("the menu lost focus on its own after Back", isFocused("Settings"))
     }
+
+    private val moreTitles = listOf("Disney", "Netflix", "Prime", "Apple", "Hulu")
+
+    /** The "more" list is a popup: a second root, which takes the remote while it's open. */
+    private fun roots() = rule.onAllNodes(isRoot()).fetchSemanticsNodes().size
+
+    private fun popupKey(k: Key) {
+        rule.onAllNodes(isRoot()).onLast().performKeyInput { pressKey(k) }
+        settle(120)
+    }
+
+    /** Back as the TV sends it: to the popup's window, which closes on it. */
+    private fun popupBack() {
+        val view = (rule.onAllNodes(isRoot()).onLast().fetchSemanticsNode().root as ViewRootForTest).view.rootView
+        rule.runOnUiThread {
+            view.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_BACK))
+            view.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_BACK))
+        }
+        settle(300)
+    }
+
+    private fun browseTab() = ViewModelProvider(rule.activity, factory)[BrowseViewModel::class.java].state.value.tab
+
+    /**
+     * The menu was too long: every collection had a label. Now it carries the
+     * everyday sections and a "more" button for the collections. One picked
+     * there opens, joins the menu while you're in it, and is where Back from
+     * the screen goes up to.
+     */
+    @Test
+    fun moreHoldsTheCollections() {
+        rule.setContent { ArcTvTheme { HomeScreen(factory) } }
+        settle(300)
+
+        // Along the whole menu: the collections aren't on it.
+        repeat(12) { if (!onMenu()) key(Key.DirectionUp) }
+        repeat(12) { if (!isFocused("Search")) key(Key.DirectionLeft) }
+        val walked = mutableListOf<String>()
+        repeat(12) {
+            (menuTitles + moreTitles).firstOrNull { isFocused(it) }?.let { if (walked.lastOrNull() != it) walked += it }
+            if (!isFocused("More")) key(Key.DirectionRight)
+        }
+        assertEquals(menuTitles.dropLast(1), walked)
+
+        // Resting on "more" opens nothing; settings is past it.
+        settle(700)
+        assertFalse("resting on more opened a section", shows("Check for updates"))
+        key(Key.DirectionRight)
+        assertTrue(isFocused("Settings"))
+        key(Key.DirectionLeft)
+
+        // OK opens the list on its first item, and the remote stays in it.
+        assertTrue(isFocused("More"))
+        key(Key.DirectionCenter)
+        assertEquals("the list did not open", 2, roots())
+        assertTrue("the list did not take focus", isFocused("Disney"))
+        repeat(6) { popupKey(Key.DirectionDown) }
+        assertTrue("DOWN left the list", isFocused("Hulu"))
+        repeat(3) { popupKey(Key.DirectionUp) }
+        assertTrue(isFocused("Netflix"))
+
+        // OK opens Netflix, closes the list and leaves focus on Netflix's new label.
+        popupKey(Key.DirectionCenter)
+        settle(600)
+        assertEquals("the list stayed open", 1, roots())
+        assertEquals(BrowseTab.NETFLIX, browseTab())
+        assertTrue("Netflix's label did not take focus", isFocused("Netflix"))
+        settle(1_000)
+        assertTrue("Netflix's label lost focus on its own", isFocused("Netflix"))
+
+        // Back from the screen goes up to it.
+        key(Key.DirectionDown)
+        assertFalse(isFocused("Netflix"))
+        back()
+        assertTrue("Back did not go up to Netflix's label", isFocused("Netflix"))
+
+        // The list reopens on the section you're in; Back closes it and leaves focus on "more".
+        key(Key.DirectionRight)
+        assertTrue(isFocused("More"))
+        key(Key.DirectionCenter)
+        assertEquals(2, roots())
+        // ("more" keeps focus in the menu's window, under the list.)
+        assertTrue("the list did not open on Netflix", isFocused("Netflix"))
+        popupBack()
+        assertEquals("Back did not close the list", 1, roots())
+        assertTrue("focus did not return to more", isFocused("More"))
+        assertEquals(BrowseTab.NETFLIX, browseTab())
+
+        // Leaving for an everyday section takes Netflix off the menu again.
+        key(Key.DirectionLeft) // Netflix
+        key(Key.DirectionLeft) // Guide
+        key(Key.DirectionCenter)
+        settle(600)
+        assertTrue(isFocused("Guide"))
+        assertFalse("Netflix stayed on the menu", shows("Netflix"))
+    }
+
+    private fun shows(text: String) = rule.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty()
 
     @Test
     fun backFromTheBannerGoesUpToTheMenu() {

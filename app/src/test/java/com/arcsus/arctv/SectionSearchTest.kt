@@ -90,9 +90,7 @@ class SectionSearchTest {
         rule.onAllNodes(isFocused() and SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText))
             .fetchSemanticsNodes().isNotEmpty()
 
-    private val menuTitles = listOf(
-        "Search", "Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Apple", "Hulu", "Live", "Guide", "Settings",
-    )
+    private val menuTitles = listOf("Search", "Home", "Shows", "Movies", "Live", "Guide", "More", "Settings")
 
     /** UP out of the content, LEFT to the start of the menu, RIGHT to [title], OK. */
     private fun openSection(title: String) {

@@ -10,9 +10,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
@@ -234,18 +237,37 @@ class RedesignScreens {
         rule.onAllNodes(isFocused() and (hasText(text) or hasAnyDescendant(hasText(text))))
             .fetchSemanticsNodes().isNotEmpty()
 
-    /** UP into the menu, then along it to [label], then OK. */
+    /** The menu's "more" button: an icon, named by its description. */
+    private fun onMore(): Boolean =
+        rule.onAllNodes(isFocused() and hasContentDescription("More")).fetchSemanticsNodes().isNotEmpty()
+
+    /** To the "more" list, a popup with its own root, while it's open. */
+    private fun popupKey(k: Key) {
+        rule.onAllNodes(isRoot()).onLast().performKeyInput { pressKey(k) }
+        settle(150)
+    }
+
+    /** UP into the menu, then along it to [label] (or to "more" and down its list), then OK. */
     private fun openSection(label: String) {
         repeat(12) { if (!focusOnMenu()) key(Key.DirectionUp) }
-        repeat(12) { if (!focused(label)) key(Key.DirectionLeft) }
-        repeat(12) { if (!focused(label)) key(Key.DirectionRight) }
+        if (label in more) {
+            repeat(12) { if (!onMore()) key(Key.DirectionLeft) }
+            repeat(12) { if (!onMore()) key(Key.DirectionRight) }
+            key(Key.DirectionCenter)
+            repeat(8) { if (!focused(label)) popupKey(Key.DirectionDown) }
+            repeat(8) { if (!focused(label)) popupKey(Key.DirectionUp) }
+        } else {
+            repeat(12) { if (!focused(label)) key(Key.DirectionLeft) }
+            repeat(12) { if (!focused(label)) key(Key.DirectionRight) }
+        }
         println("redesign: menu '$label' reached=${focused(label)}")
-        key(Key.DirectionCenter)
+        if (label in more) popupKey(Key.DirectionCenter) else key(Key.DirectionCenter)
         settle(1_500)
     }
 
-    private val menu = listOf("Home", "Shows", "Movies", "Disney", "Netflix", "Prime", "Apple", "Hulu", "Live", "Guide")
-    private fun focusOnMenu() = menu.any { focused(it) }
+    private val menu = listOf("Home", "Shows", "Movies", "Live", "Guide")
+    private val more = listOf("Disney", "Netflix", "Prime", "Apple", "Hulu")
+    private fun focusOnMenu() = (menu + more).any { focused(it) } || onMore()
 
     @Suppress("UNCHECKED_CAST")
     private fun <S> stateOf(vm: ViewModel, field: String = "_state"): MutableStateFlow<S> =
@@ -395,13 +417,20 @@ class RedesignScreens {
         settle(3_000)
         snap("12-home-menu")
 
-        // With Real-Debrid connected the menu also carries Downloads and
-        // Torrents: the most it has to fit, beside the clock and settings.
+        // With Real-Debrid connected, Downloads and Torrents join the
+        // collections under "more": the menu itself stays as it was.
         val settings = provider[SettingsViewModel::class.java]
         val settingsState = stateOf<SettingsViewModel.UiState>(settings)
         settingsState.value = settingsState.value.copy(rdConnected = true)
         settle(2_000)
         snap("13-menu-real-debrid")
+        key(Key.DirectionRight, 5)
+        println("redesign: menu 'More' reached=${onMore()}")
+        key(Key.DirectionCenter)
+        // One step down: the list's first frame can draw its focus late here.
+        popupKey(Key.DirectionDown)
+        settle(1_500)
+        snapScreen("14-menu-more")
     }
 
     private companion object {
