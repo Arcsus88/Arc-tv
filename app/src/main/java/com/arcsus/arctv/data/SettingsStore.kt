@@ -100,10 +100,11 @@ class SettingsStore(context: Context) {
     }
 
     /**
-     * Which app opens films and series: "" for the system default, "ask" for
-     * the chooser, or a package name.
+     * Which app opens films and series: "arc" for Arc's own player (libVLC),
+     * "" for the system default, "ask" for the chooser, or a package name.
+     * Arc's player unless the viewer has picked another.
      */
-    val moviePlayer: Flow<String> = dataStore.data.map { it[Keys.MOVIE_PLAYER].orEmpty() }
+    val moviePlayer: Flow<String> = dataStore.data.map { it[Keys.MOVIE_PLAYER] ?: "arc" }
 
     suspend fun saveMoviePlayer(player: String) {
         dataStore.edit { it[Keys.MOVIE_PLAYER] = player }

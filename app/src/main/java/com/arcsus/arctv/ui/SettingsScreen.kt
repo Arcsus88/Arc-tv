@@ -154,9 +154,9 @@ fun SettingsScreen(viewModel: SettingsViewModel, updateViewModel: UpdateViewMode
         item { SectionTitle("Players") }
 
         item {
-            // Which installed app opens what. Films and series go to the
-            // player that handles the file (VLC decodes DTS audio; the TV's
-            // own player often doesn't); live TV can also use Arc's player.
+            // Which app opens what. Films and series play in Arc's libVLC
+            // player unless another app is picked; live TV can use Arc's
+            // own live player too.
             val context = LocalContext.current
             val players = remember { installedVideoPlayers(context) }
             Column {
@@ -164,7 +164,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, updateViewModel: UpdateViewMode
                     title = "Films & series",
                     current = state.moviePlayer,
                     players = players,
-                    includeArc = false,
+                    includeArc = true,
                     onPick = { viewModel.saveMoviePlayer(it) },
                 )
                 Spacer(Modifier.height(14.dp))
@@ -177,9 +177,11 @@ fun SettingsScreen(viewModel: SettingsViewModel, updateViewModel: UpdateViewMode
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "System default is whatever the TV opens video with. Ask each time shows the chooser. " +
-                        "Arc TV's own live player changes channel with up and down, but uses Arc's network " +
-                        "route -- pick an external player if only that player sits in your VPN's app list.",
+                    "Arc TV plays films and series itself on VLC's engine -- any format VLC plays, DTS sound " +
+                        "included, with audio and subtitle choices. Its live player changes channel with up " +
+                        "and down. Both use Arc's network route -- pick an external player if only that player " +
+                        "sits in your VPN's app list. System default is whatever the TV opens video with; Ask " +
+                        "each time shows the chooser.",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

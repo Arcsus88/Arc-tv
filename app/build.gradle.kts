@@ -30,7 +30,7 @@ val hasReleaseSigning = releaseStoreFile != null && releaseStorePassword != null
 // the installed build always reports exactly the version of the release it came
 // from. They used to be set independently, and any drift left the update banner
 // permanently offering a release the device already had.
-val fallbackVersion = "1.26.0"
+val fallbackVersion = "1.27.0"
 val releaseVersion: String =
     (project.findProperty("releaseVersion") as String?)?.trim()?.removePrefix("v")
         ?.takeIf { it.isNotEmpty() } ?: fallbackVersion
@@ -54,6 +54,21 @@ android {
         targetSdk = 36
         versionCode = versionCodeOf(releaseVersion)
         versionName = releaseVersion
+
+        // libVLC ships native code per processor. TVs are ARM; its x86 builds
+        // would nearly double the APK for emulators alone (and an x86 device
+        // can no longer install Arc TV).
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
+    }
+
+    // Compress libVLC's native libraries inside the APK: roughly halves the
+    // download the update banner fetches.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     signingConfigs {
@@ -121,6 +136,13 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.ui)
+    // Films and series in-app player: VLC's engine, so whatever VLC plays
+    // (MKV, HEVC, DTS/TrueHD sound, embedded subtitles) plays inside Arc.
+    // Its classes are plain Java, but its POM asks for kotlin-stdlib 2.2,
+    // newer than this project's Kotlin 2.0 compiler can read.
+    implementation(libs.libvlc.all) {
+        exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib")
+    }
 
     // Design-loop screenshot harness (test only; nothing ships).
     testImplementation(libs.junit)

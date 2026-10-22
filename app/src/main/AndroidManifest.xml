@@ -69,6 +69,15 @@
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
             android:theme="@style/Theme.ArcTv" />
 
+        <!-- Full-screen films and series (libVLC), likewise never re-opened
+             for a configuration change. -->
+        <activity
+            android:name=".VideoPlayerActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+            android:theme="@style/Theme.ArcTv" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

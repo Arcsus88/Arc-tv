@@ -43,7 +43,7 @@ fun formatDate(iso: String): String {
  * Hands the URL to an external video player (VLC, Just Player, …).
  * Returns false when no player is installed.
  */
-/** Player choices stored in Settings: the system default, the chooser, Arc's own live player, or a package name. */
+/** Player choices stored in Settings: the system default, the chooser, Arc's own player, or a package name. */
 const val PLAYER_DEFAULT = ""
 const val PLAYER_ASK = "ask"
 const val PLAYER_ARC = "arc"

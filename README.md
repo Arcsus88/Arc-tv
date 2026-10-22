@@ -2,8 +2,8 @@
 
 An Android TV client for [Real-Debrid](https://real-debrid.com) and
 [AllDebrid](https://alldebrid.com): browse the catalogue, your downloads and
-torrents from the couch and play them with your favourite video player (VLC,
-Just Player, …).
+torrents from the couch and play them in its built-in player (VLC's engine)
+or your favourite video player app (VLC, Just Player, …).
 
 ## Features
 
@@ -48,8 +48,14 @@ Just Player, …).
 - **Downloads grid** — your Real-Debrid downloads, newest first, with D-pad
   navigation, file size, host icon and date. Toggle to filter to streamable
   video files (mkv/mp4/avi).
-- **External playback** — selecting an item hands the stream URL to any
-  installed video player. Long-press to copy the link instead.
+- **Built-in player** — films and series play inside Arc TV on libVLC, the
+  engine the VLC app is built on, so anything VLC plays (MKV, HEVC, DTS and
+  TrueHD sound, embedded subtitles) plays without leaving the app. OK pauses,
+  LEFT/RIGHT skip 10 seconds (held, 30), and the controls pick the audio
+  track and subtitles; a series offers the next episode when one ends.
+  Settings → Players can hand films to another app instead (VLC, Just
+  Player, …), and "Open with…" in the player does it for one video.
+  Long-press an item to copy the link.
 - **Torrents tab** — see torrent status/progress; for finished torrents pick a
   file, unrestrict it, and play.
 - **Self-updating** — checks GitHub Releases on launch and offers to download

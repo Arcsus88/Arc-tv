@@ -84,11 +84,15 @@ fun BrowseScreen(
     val detail by viewModel.detail.collectAsState()
     val playRequest by viewModel.playRequest.collectAsState()
     val context = LocalContext.current
-    val openVideo = rememberVideoPlay()
 
     // The next episode we're offering to auto-advance to, and the countdown.
     var autoNext by remember { mutableStateOf<NextEp?>(null) }
     var secondsLeft by remember { mutableStateOf(0) }
+
+    // Arc's own player says when an episode played to the end.
+    val openVideo = rememberVideoPlay(onPlayedToEnd = {
+        (viewModel.sheet.value as? BrowseViewModel.Sheet.Sources)?.next?.let { autoNext = it }
+    })
 
     // Diagnosing instant player exits: what we launched and when, plus the
     // stream to show in the "that didn't play" dialog when the player dies
@@ -101,7 +105,8 @@ fun BrowseScreen(
     // for-result flow made some TV players (VLC included) die before showing
     // any UI. Without a result we watch our own lifecycle instead: coming back
     // within seconds means the player choked (diagnose); coming back after a
-    // while means the video likely ended (offer the next episode).
+    // while means the video likely ended (offer the next episode). Arc's own
+    // player needs none of this: it reports back, and shows its own errors.
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -137,7 +142,7 @@ fun BrowseScreen(
     LaunchedEffect(playRequest) {
         playRequest?.let { stream ->
             lastStream = stream
-            launchedAt = System.currentTimeMillis()
+            launchedAt = if (openVideo.inApp) 0L else System.currentTimeMillis()
             if (!openVideo(stream.streamUrl, stream.filename)) {
                 launchedAt = 0L
                 android.widget.Toast.makeText(
@@ -235,7 +240,7 @@ fun BrowseScreen(
                 Button(onClick = {
                     quickExit = null
                     lastStream = stream
-                    launchedAt = System.currentTimeMillis()
+                    launchedAt = if (openVideo.inApp) 0L else System.currentTimeMillis()
                     if (!openVideo(stream.streamUrl, stream.filename)) {
                         launchedAt = 0L
                         android.widget.Toast.makeText(
